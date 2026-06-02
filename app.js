@@ -1,693 +1,298 @@
 /**
- * app.js — VF Premium Numbers Dashboard
+ * app.js — VF Premium Numbers Dashboard (Tailwind)
  *
- * Fetches ./latest.json and ./history.json (same-origin, no-store cache),
- * then renders a ranked list of premium Egyptian mobile numbers.
- *
- * Two views:
- *   "best-now"   → latest.best_thirty, available numbers only
- *   "best-ever"  → history.json top-30 by best_grade, any status
- *
- * No frameworks, no build step, no external network requests.
+ * Fetches ./latest.json and ./history.json (same-origin, no-store), then renders
+ * a ranked, filterable, sortable view of premium Egyptian mobile numbers.
+ * Two views: "best available now" (latest.best_thirty) and "best ever seen"
+ * (computed from history.json by best_grade). XSS-safe: text via textContent only.
  */
 
-"use strict";
-
-/* ================================================================
-   STATE
-   ================================================================ */
-
-/** @type {{ latest: LatestData|null, history: HistoryMap|null, error: string|null, loading: boolean }} */
 const state = {
-  latest:  null,
+  latest: null,
   history: null,
-  error:   null,
-  loading: true,
-};
-
-/** @type {{ view: "best-now"|"best-ever", filter: string, sort: "grade"|"score"|"newest" }} */
-const ui = {
-  view:   "best-now",
+  view: "now", // "now" | "ever"
   filter: "",
-  sort:   "grade",
+  sort: "grade",
+  error: false,
 };
 
-/* ================================================================
-   TYPE DOCUMENTATION (JSDoc only — no runtime impact)
-   ================================================================
+/* ----------------------------- helpers ----------------------------- */
 
-   @typedef {{
-     generated_at: string,
-     total: number,
-     new_count: number,
-     disappeared_count: number,
-     best_thirty: BestEntry[]
-   }} LatestData
+const $ = (id) => document.getElementById(id);
 
-   @typedef {{
-     msisdn: string,
-     score: number,
-     grade: number,
-     reason: string,
-     is_new: boolean,
-     first_seen: string,
-     age_days: number,
-     tags: string[]
-   }} BestEntry
-
-   @typedef {Record<string, HistoryEntry>} HistoryMap
-
-   @typedef {{
-     first_seen: string,
-     last_seen: string,
-     score: number,
-     tags: string[],
-     best_grade: number,
-     status: "available"|"gone"
-   }} HistoryEntry
-*/
-
-/* ================================================================
-   DATA LOADING
-   ================================================================ */
-
-/**
- * Fetch a JSON file with cache bypassed.
- * Returns the parsed object or throws on non-200 / network error.
- * @param {string} url
- * @returns {Promise<unknown>}
- */
-async function fetchJSON(url) {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  return res.json();
+/** Format an MSISDN as 0100 000 0000 for readability. */
+function fmt(m) {
+  return `${m.slice(0, 4)} ${m.slice(4, 7)} ${m.slice(7)}`;
 }
 
-/**
- * Load both data files concurrently and populate state.
- * Never throws — sets state.error on failure.
- */
-async function loadData() {
-  state.loading = true;
-  state.error   = null;
-  render();
+/** Relative time like "4 min ago". */
+function relTime(iso) {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "unknown";
+  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (s < 60) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} hr ago`;
+  return `${Math.round(h / 24)} d ago`;
+}
 
+/** Grade -> Tailwind color classes {ring, text, chipBg, chipText}. */
+function gradeStyle(g) {
+  if (g >= 95) return { ring: "#10b981", text: "text-emerald-300", chip: "bg-emerald-500/10 text-emerald-300 ring-emerald-500/20" };
+  if (g >= 90) return { ring: "#22c55e", text: "text-green-300", chip: "bg-green-500/10 text-green-300 ring-green-500/20" };
+  if (g >= 85) return { ring: "#84cc16", text: "text-lime-300", chip: "bg-lime-500/10 text-lime-300 ring-lime-500/20" };
+  if (g >= 80) return { ring: "#eab308", text: "text-amber-300", chip: "bg-amber-500/10 text-amber-300 ring-amber-500/20" };
+  return { ring: "#f97316", text: "text-orange-300", chip: "bg-orange-500/10 text-orange-300 ring-orange-500/20" };
+}
+
+const RANK_BADGE = [
+  "bg-gradient-to-br from-amber-300 to-yellow-600 text-black", // 1
+  "bg-gradient-to-br from-zinc-200 to-zinc-400 text-black", // 2
+  "bg-gradient-to-br from-amber-600 to-amber-800 text-white", // 3
+];
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+
+/** Circular grade ring (SVG), 0-100. */
+function gradeRing(grade) {
+  const { ring, text } = gradeStyle(grade);
+  const r = 22, c = 2 * Math.PI * r, off = c * (1 - Math.max(0, Math.min(100, grade)) / 100);
+  const wrap = el("div", "relative grid h-14 w-14 shrink-0 place-items-center");
+  wrap.innerHTML =
+    `<svg class="h-14 w-14 -rotate-90" viewBox="0 0 52 52" aria-hidden="true">` +
+    `<circle cx="26" cy="26" r="${r}" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="4"/>` +
+    `<circle cx="26" cy="26" r="${r}" fill="none" stroke="${ring}" stroke-width="4" stroke-linecap="round" ` +
+    `stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/></svg>`;
+  const lbl = el("span", `absolute num-tnum text-base font-bold ${text}`, String(grade));
+  wrap.appendChild(lbl);
+  wrap.setAttribute("aria-label", `grade ${grade} of 100`);
+  return wrap;
+}
+
+/* ----------------------------- data ----------------------------- */
+
+async function load() {
   try {
-    const [latest, history] = await Promise.all([
-      fetchJSON("./latest.json"),
-      fetchJSON("./history.json"),
+    const [l, h] = await Promise.all([
+      fetch("./latest.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
+      fetch("./history.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : {})),
     ]);
-
-    // Basic shape validation so downstream code can trust the data
-    if (!latest || typeof latest !== "object") throw new Error("latest.json has unexpected shape");
-    if (!history || typeof history !== "object") throw new Error("history.json has unexpected shape");
-
-    state.latest  = /** @type {LatestData} */ (latest);
-    state.history = /** @type {HistoryMap} */ (history);
-  } catch (err) {
-    state.error = err instanceof Error ? err.message : String(err);
+    state.latest = l;
+    state.history = h && typeof h === "object" ? h : {};
+    state.error = false;
+  } catch (e) {
+    state.error = true;
   }
-
-  state.loading = false;
-  render();
-}
-
-/* ================================================================
-   DATA HELPERS
-   ================================================================ */
-
-/**
- * Format an 11-digit Egyptian MSISDN as "0100 000 0000".
- * Falls back to the raw string for unexpected formats.
- * @param {string} msisdn
- * @returns {string}
- */
-function formatMsisdn(msisdn) {
-  // Standard Egyptian mobile: 01X + 8 digits → "01X0 XXX XXXX"
-  const m = String(msisdn).replace(/\D/g, "");
-  if (m.length === 11) {
-    return `${m.slice(0, 4)} ${m.slice(4, 7)} ${m.slice(7)}`;
-  }
-  return msisdn;
-}
-
-/**
- * Return a human-readable relative time string from an ISO timestamp.
- * e.g. "3 min ago", "2 h ago", "just now"
- * @param {string} isoStr
- * @returns {string}
- */
-function relativeTime(isoStr) {
-  const diffMs  = Date.now() - new Date(isoStr).getTime();
-  const diffSec = Math.max(0, Math.round(diffMs / 1000));
-  if (diffSec < 60)   return "just now";
-  const diffMin = Math.round(diffSec / 60);
-  if (diffMin < 60)   return `${diffMin} min ago`;
-  const diffH   = Math.round(diffMin / 60);
-  if (diffH < 24)     return `${diffH} h ago`;
-  const diffD   = Math.round(diffH / 24);
-  return `${diffD} d ago`;
-}
-
-/**
- * Map a numeric grade (0–100) to a CSS class suffix for colour coding.
- * @param {number} grade
- * @returns {string}
- */
-function gradeClass(grade) {
-  if (grade >= 90) return "grade-90";
-  if (grade >= 75) return "grade-75";
-  if (grade >= 60) return "grade-60";
-  if (grade >= 45) return "grade-45";
-  return "grade-lo";
-}
-
-/**
- * Return age description: "Xd old" or "today".
- * @param {number|undefined} ageDays
- * @param {string|undefined} firstSeen
- * @returns {string}
- */
-function ageLabel(ageDays, firstSeen) {
-  if (ageDays !== undefined && ageDays !== null) {
-    return ageDays === 0 ? "today" : `${ageDays}d old`;
-  }
-  if (firstSeen) {
-    const days = Math.round((Date.now() - new Date(firstSeen).getTime()) / 86400000);
-    return days === 0 ? "today" : `${days}d old`;
-  }
-  return "";
-}
-
-/**
- * Compute the "best ever" list from history.json:
- * Top 30 entries sorted by best_grade desc.
- * @param {HistoryMap} history
- * @returns {Array<{ msisdn: string, best_grade: number, score: number, tags: string[], status: string, first_seen: string }>}
- */
-function computeBestEver(history) {
-  return Object.entries(history)
-    .map(([msisdn, entry]) => ({ msisdn, ...entry }))
-    .sort((a, b) => b.best_grade - a.best_grade)
-    .slice(0, 30);
-}
-
-/**
- * Apply the current filter + sort to an array of best_thirty entries.
- * @param {BestEntry[]} entries
- * @returns {BestEntry[]}
- */
-function filterAndSortBestNow(entries) {
-  let result = entries;
-
-  if (ui.filter.trim()) {
-    // Filter by raw digits only — strip spaces so "0100 000" matches "01000001234"
-    const needle = ui.filter.replace(/\D/g, "");
-    result = result.filter(e => String(e.msisdn).includes(needle));
-  }
-
-  if (ui.sort === "score") {
-    result = [...result].sort((a, b) => b.score - a.score);
-  } else if (ui.sort === "newest") {
-    result = [...result].sort((a, b) => (a.age_days ?? 999) - (b.age_days ?? 999));
-  }
-  // "grade" (default) keeps the server-ranked order unless filtered
-
-  return result;
-}
-
-/**
- * Apply the current filter + sort to the best-ever list.
- * @param {ReturnType<typeof computeBestEver>} entries
- * @returns {ReturnType<typeof computeBestEver>}
- */
-function filterAndSortBestEver(entries) {
-  let result = entries;
-
-  if (ui.filter.trim()) {
-    const needle = ui.filter.replace(/\D/g, "");
-    result = result.filter(e => String(e.msisdn).includes(needle));
-  }
-
-  if (ui.sort === "score") {
-    result = [...result].sort((a, b) => b.score - a.score);
-  } else if (ui.sort === "newest") {
-    result = [...result].sort((a, b) =>
-      new Date(b.first_seen).getTime() - new Date(a.first_seen).getTime()
-    );
-  }
-  // "grade" keeps best_grade desc order
-
-  return result;
-}
-
-/* ================================================================
-   CLIPBOARD
-   ================================================================ */
-
-/**
- * Copy text to clipboard and briefly flash the button as "Copied".
- * @param {string} text
- * @param {HTMLButtonElement} btn
- */
-function copyToClipboard(text, btn) {
-  navigator.clipboard.writeText(text).then(() => {
-    btn.textContent = "Copied!";
-    btn.classList.add("copied");
-    setTimeout(() => {
-      btn.textContent = "Copy";
-      btn.classList.remove("copied");
-    }, 1800);
-  }).catch(() => {
-    // Fallback for environments without clipboard API
-    btn.textContent = "Error";
-    setTimeout(() => { btn.textContent = "Copy"; }, 1800);
-  });
-}
-
-/* ================================================================
-   RENDER HELPERS — return DOM nodes, never strings (XSS safe)
-   ================================================================ */
-
-/**
- * Create a DOM element with optional properties.
- * @param {string} tag
- * @param {Record<string, string>} [attrs]
- * @param {string} [text]
- * @returns {HTMLElement}
- */
-function el(tag, attrs, text) {
-  const node = document.createElement(tag);
-  if (attrs) {
-    for (const [k, v] of Object.entries(attrs)) {
-      if (k === "className") node.className = v;
-      else node.setAttribute(k, v);
-    }
-  }
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
-
-/**
- * Build a single number card DOM node for the "best now" view.
- * @param {BestEntry} entry
- * @param {number} rank  1-based
- * @returns {HTMLElement}
- */
-function buildBestNowCard(entry, rank) {
-  const card = el("article", {
-    className: "number-card",
-    role: "listitem",
-    "aria-label": `Rank ${rank}: ${formatMsisdn(entry.msisdn)}, grade ${entry.grade}`,
-  });
-
-  // --- Rank
-  const rankEl = el("div", { className: `card-rank${rank <= 3 ? " rank-top" : ""}` }, `#${rank}`);
-  card.appendChild(rankEl);
-
-  // --- Body
-  const body = el("div", { className: "card-body" });
-
-  const topRow = el("div", { className: "card-top-row" });
-
-  const msisdnEl = el("span", { className: "card-msisdn" }, formatMsisdn(entry.msisdn));
-  topRow.appendChild(msisdnEl);
-
-  if (entry.is_new) {
-    topRow.appendChild(el("span", { className: "badge-new", role: "status" }, "NEW"));
-  }
-
-  const age = ageLabel(entry.age_days, entry.first_seen);
-  if (age) {
-    topRow.appendChild(el("span", { className: "card-age" }, age));
-  }
-
-  body.appendChild(topRow);
-
-  if (entry.reason) {
-    body.appendChild(el("p", { className: "card-reason" }, entry.reason));
-  }
-
-  if (Array.isArray(entry.tags) && entry.tags.length > 0) {
-    const tagsEl = el("div", { className: "card-tags", role: "list", "aria-label": "Pattern tags" });
-    for (const tag of entry.tags) {
-      tagsEl.appendChild(el("span", { className: "tag-pill", role: "listitem" }, tag));
-    }
-    body.appendChild(tagsEl);
-  }
-
-  card.appendChild(body);
-
-  // --- Right column
-  const right = el("div", { className: "card-right" });
-
-  const badge = el("div", {
-    className: `grade-badge ${gradeClass(entry.grade)}`,
-    role: "img",
-    "aria-label": `Grade ${entry.grade}`,
-  }, String(entry.grade));
-  right.appendChild(badge);
-
-  right.appendChild(el("div", { className: "grade-sub" }, `score ${entry.score}`));
-
-  const copyBtn = /** @type {HTMLButtonElement} */ (el("button", {
-    className: "copy-btn",
-    type: "button",
-    "aria-label": `Copy number ${formatMsisdn(entry.msisdn)}`,
-    title: "Copy to clipboard",
-  }, "Copy"));
-  copyBtn.addEventListener("click", () => copyToClipboard(entry.msisdn, copyBtn));
-  right.appendChild(copyBtn);
-
-  card.appendChild(right);
-  return card;
-}
-
-/**
- * Build a single number card DOM node for the "best ever" view.
- * @param {{ msisdn: string, best_grade: number, score: number, tags: string[], status: string, first_seen: string }} entry
- * @param {number} rank  1-based
- * @returns {HTMLElement}
- */
-function buildBestEverCard(entry, rank) {
-  const isGone = entry.status === "gone";
-  const card = el("article", {
-    className: `number-card${isGone ? " is-gone" : ""}`,
-    role: "listitem",
-    "aria-label": `Rank ${rank}: ${formatMsisdn(entry.msisdn)}, best grade ${entry.best_grade}, status ${entry.status}`,
-  });
-
-  // Rank
-  card.appendChild(el("div", {
-    className: `card-rank${rank <= 3 ? " rank-top" : ""}`,
-  }, `#${rank}`));
-
-  // Body
-  const body = el("div", { className: "card-body" });
-  const topRow = el("div", { className: "card-top-row" });
-
-  topRow.appendChild(el("span", { className: "card-msisdn" }, formatMsisdn(entry.msisdn)));
-
-  if (isGone) {
-    topRow.appendChild(el("span", { className: "badge-gone" }, "GONE"));
-  } else {
-    topRow.appendChild(el("span", { className: "badge-new" }, "LIVE"));
-  }
-
-  const age = ageLabel(undefined, entry.first_seen);
-  if (age) {
-    topRow.appendChild(el("span", { className: "card-age" }, age));
-  }
-
-  body.appendChild(topRow);
-
-  if (Array.isArray(entry.tags) && entry.tags.length > 0) {
-    const tagsEl = el("div", { className: "card-tags", role: "list", "aria-label": "Pattern tags" });
-    for (const tag of entry.tags) {
-      tagsEl.appendChild(el("span", { className: "tag-pill", role: "listitem" }, tag));
-    }
-    body.appendChild(tagsEl);
-  }
-
-  card.appendChild(body);
-
-  // Right
-  const right = el("div", { className: "card-right" });
-  const badge = el("div", {
-    className: `grade-badge ${gradeClass(entry.best_grade)}`,
-    role: "img",
-    "aria-label": `Best grade ${entry.best_grade}`,
-  }, String(entry.best_grade));
-  right.appendChild(badge);
-  right.appendChild(el("div", { className: "grade-sub" }, `score ${entry.score}`));
-
-  const copyBtn = /** @type {HTMLButtonElement} */ (el("button", {
-    className: "copy-btn",
-    type: "button",
-    "aria-label": `Copy number ${formatMsisdn(entry.msisdn)}`,
-  }, "Copy"));
-  copyBtn.addEventListener("click", () => copyToClipboard(entry.msisdn, copyBtn));
-  right.appendChild(copyBtn);
-
-  card.appendChild(right);
-  return card;
-}
-
-/**
- * Build the skeleton loading cards (3 placeholder cards).
- * @returns {DocumentFragment}
- */
-function buildSkeletons() {
-  const frag = document.createDocumentFragment();
-  const wrap = el("div", { className: "skeleton-list", "aria-label": "Loading numbers…", role: "status" });
-  for (let i = 0; i < 5; i++) {
-    wrap.appendChild(el("div", { className: "skeleton-card" }));
-  }
-  frag.appendChild(wrap);
-  return frag;
-}
-
-/**
- * Build the error state DOM node.
- * @param {string} message
- * @returns {HTMLElement}
- */
-function buildErrorState(message) {
-  const wrap = el("div", { className: "state-message", role: "alert" });
-  wrap.appendChild(el("span", { className: "state-icon", "aria-hidden": "true" }, "⚠️"));
-  wrap.appendChild(el("h2", {}, "Could not load data"));
-  wrap.appendChild(el("p", {}, `${message}. The data files may not exist yet — the scraper runs every ~10–20 minutes.`));
-
-  const btn = /** @type {HTMLButtonElement} */ (el("button", {
-    className: "retry-btn",
-    type: "button",
-    "aria-label": "Retry loading data",
-  }, "Try again"));
-  btn.addEventListener("click", loadData);
-  wrap.appendChild(btn);
-
-  return wrap;
-}
-
-/**
- * Build the empty-results state DOM node.
- * @param {string} context  e.g. "best-now" or "best-ever"
- * @returns {HTMLElement}
- */
-function buildEmptyState(context) {
-  const wrap = el("div", { className: "state-message" });
-  wrap.appendChild(el("span", { className: "state-icon", "aria-hidden": "true" }, "🔍"));
-  wrap.appendChild(el("h2", {}, "No numbers found"));
-  const msg = context === "filter"
-    ? "No numbers match your filter. Try different digits."
-    : "No data available yet. Check back shortly.";
-  wrap.appendChild(el("p", {}, msg));
-  return wrap;
-}
-
-/* ================================================================
-   MAIN RENDER
-   ================================================================ */
-
-/**
- * Update the header stats and timestamp from latest.json data.
- */
-function renderHeader() {
-  const updated  = document.getElementById("last-updated");
-  const total    = document.getElementById("stat-total");
-  const newCount = document.getElementById("stat-new");
-  const goneCount= document.getElementById("stat-gone");
-
-  if (state.latest) {
-    if (updated)  {
-      const timeEl = updated.querySelector("span");
-      if (timeEl) timeEl.textContent = relativeTime(state.latest.generated_at);
-    }
-    if (total)     total.textContent     = String(state.latest.total);
-    if (newCount)  newCount.textContent  = `+${state.latest.new_count}`;
-    if (goneCount) goneCount.textContent = `-${state.latest.disappeared_count}`;
-  } else {
-    if (updated) {
-      const timeEl = updated.querySelector("span");
-      if (timeEl) timeEl.textContent = "—";
-    }
-    if (total)     total.textContent     = "—";
-    if (newCount)  newCount.textContent  = "—";
-    if (goneCount) goneCount.textContent = "—";
-  }
-}
-
-/**
- * Replace the content of the main list area with current view.
- */
-function renderList() {
-  const container = document.getElementById("list-container");
-  if (!container) return;
-
-  // Clear previous content
-  while (container.firstChild) container.removeChild(container.firstChild);
-
-  const countEl = document.getElementById("results-count");
-
-  // Loading state
-  if (state.loading) {
-    container.appendChild(buildSkeletons());
-    if (countEl) countEl.textContent = "";
-    return;
-  }
-
-  // Error state
-  if (state.error) {
-    container.appendChild(buildErrorState(state.error));
-    if (countEl) countEl.textContent = "";
-    return;
-  }
-
-  // No data at all
-  if (!state.latest && !state.history) {
-    container.appendChild(buildEmptyState("data"));
-    if (countEl) countEl.textContent = "";
-    return;
-  }
-
-  if (ui.view === "best-now") {
-    renderBestNow(container, countEl);
-  } else {
-    renderBestEver(container, countEl);
-  }
-}
-
-/**
- * Render the "Best available now" view.
- * @param {HTMLElement} container
- * @param {HTMLElement|null} countEl
- */
-function renderBestNow(container, countEl) {
-  if (!state.latest) {
-    container.appendChild(buildEmptyState("data"));
-    if (countEl) countEl.textContent = "";
-    return;
-  }
-
-  const raw     = state.latest.best_thirty || [];
-  const entries = filterAndSortBestNow(raw);
-
-  if (countEl) {
-    countEl.textContent = entries.length === raw.length
-      ? `${entries.length} numbers`
-      : `${entries.length} of ${raw.length} numbers`;
-  }
-
-  if (entries.length === 0) {
-    container.appendChild(buildEmptyState(ui.filter ? "filter" : "data"));
-    return;
-  }
-
-  const list = el("div", { className: "number-list", role: "list", "aria-label": "Best available numbers" });
-  entries.forEach((entry, i) => list.appendChild(buildBestNowCard(entry, i + 1)));
-  container.appendChild(list);
-}
-
-/**
- * Render the "Best ever seen" view from history.json.
- * @param {HTMLElement} container
- * @param {HTMLElement|null} countEl
- */
-function renderBestEver(container, countEl) {
-  if (!state.history) {
-    container.appendChild(buildEmptyState("data"));
-    if (countEl) countEl.textContent = "";
-    return;
-  }
-
-  const raw     = computeBestEver(state.history);
-  const entries = filterAndSortBestEver(raw);
-
-  if (countEl) {
-    countEl.textContent = entries.length === raw.length
-      ? `${entries.length} numbers`
-      : `${entries.length} of ${raw.length} numbers`;
-  }
-
-  if (entries.length === 0) {
-    container.appendChild(buildEmptyState(ui.filter ? "filter" : "data"));
-    return;
-  }
-
-  const list = el("div", { className: "number-list", role: "list", "aria-label": "Best ever seen numbers" });
-  entries.forEach((entry, i) => list.appendChild(buildBestEverCard(entry, i + 1)));
-  container.appendChild(list);
-}
-
-/**
- * Full render pass — header + list.
- */
-function render() {
   renderHeader();
   renderList();
 }
 
-/* ================================================================
-   EVENT WIRING
-   ================================================================ */
+/** Build "best ever seen" rows from history, sorted by best_grade. */
+function bestEver() {
+  const h = state.history || {};
+  return Object.entries(h)
+    .map(([msisdn, e]) => ({
+      msisdn,
+      grade: e.best_grade ?? e.score ?? 0,
+      score: e.score ?? 0,
+      reason: e.status === "gone" ? "no longer available" : "currently available",
+      tags: e.tags || [],
+      is_new: false,
+      first_seen: e.first_seen || "",
+      age_days: 0,
+      status: e.status || "available",
+    }))
+    .sort((a, b) => b.grade - a.grade)
+    .slice(0, 30);
+}
 
-/**
- * Attach all interactive UI event listeners.
- * Called once after DOMContentLoaded.
- */
-function wireEvents() {
-  // Tab buttons
-  const tabBtns = document.querySelectorAll(".tab-btn");
-  tabBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-      const view = btn.getAttribute("data-view");
-      if (view === "best-now" || view === "best-ever") {
-        ui.view = view;
-        tabBtns.forEach(b => b.setAttribute("aria-selected", "false"));
-        btn.setAttribute("aria-selected", "true");
-        renderList();
-      }
-    });
+function currentRows() {
+  let rows = state.view === "now" ? (state.latest?.best_thirty || []).slice() : bestEver();
+
+  const f = state.filter.replace(/\D/g, "");
+  if (f) rows = rows.filter((r) => r.msisdn.replace(/\D/g, "").includes(f));
+
+  const by = state.sort;
+  rows.sort((a, b) => {
+    if (by === "new") return (b.is_new ? 1 : 0) - (a.is_new ? 1 : 0) || b.grade - a.grade;
+    if (by === "score") return (b.score || 0) - (a.score || 0);
+    return (b.grade || 0) - (a.grade || 0);
   });
+  return rows;
+}
 
-  // Filter input — debounced slightly for UX
-  let filterTimer = 0;
-  const filterInput = document.getElementById("filter-input");
-  if (filterInput) {
-    filterInput.addEventListener("input", (e) => {
-      clearTimeout(filterTimer);
-      filterTimer = window.setTimeout(() => {
-        ui.filter = /** @type {HTMLInputElement} */ (e.target).value;
-        renderList();
-      }, 150);
-    });
+/* ----------------------------- render ----------------------------- */
+
+function renderHeader() {
+  if (state.error || !state.latest) {
+    $("updated").textContent = state.error ? "data unavailable" : "loading…";
+    return;
   }
+  $("updated").textContent = "updated " + relTime(state.latest.generated_at);
+  $("stat-total").textContent = (state.latest.total ?? 0).toLocaleString();
+  $("stat-new").textContent = "+" + (state.latest.new_count ?? 0);
+  $("stat-gone").textContent = "-" + (state.latest.disappeared_count ?? 0);
+}
 
-  // Sort select
-  const sortSelect = document.getElementById("sort-select");
-  if (sortSelect) {
-    sortSelect.addEventListener("change", (e) => {
-      const v = /** @type {HTMLSelectElement} */ (e.target).value;
-      if (v === "grade" || v === "score" || v === "newest") {
-        ui.sort = v;
-        renderList();
-      }
-    });
+function card(row, i) {
+  const gs = gradeStyle(row.grade);
+  const isGone = row.status === "gone";
+
+  const root = el(
+    "div",
+    "group animate-fadeUp relative flex items-center gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-4 " +
+      "transition hover:border-white/10 hover:bg-ink-850 " +
+      (isGone ? "opacity-60" : "")
+  );
+  root.style.animationDelay = `${Math.min(i * 28, 400)}ms`;
+  root.setAttribute("role", "listitem");
+
+  // rank
+  const rank = el(
+    "div",
+    "grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold num-tnum " +
+      (i < 3 ? RANK_BADGE[i] : "bg-ink-700 text-zinc-400"),
+    String(i + 1)
+  );
+
+  // middle
+  const mid = el("div", "min-w-0 flex-1");
+  const top = el("div", "flex flex-wrap items-center gap-2");
+  const number = el("span", "font-mono text-lg font-bold tracking-wide text-white num-tnum", fmt(row.msisdn));
+  top.appendChild(number);
+
+  if (row.is_new) {
+    top.appendChild(el("span", "rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-300 ring-1 ring-emerald-500/30", "New"));
+  }
+  if (isGone) {
+    top.appendChild(el("span", "rounded-md bg-zinc-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-400 ring-1 ring-zinc-500/30", "Gone"));
+  } else if (state.view === "ever") {
+    top.appendChild(el("span", "rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-300/80 ring-1 ring-emerald-500/20", "Live"));
+  }
+  mid.appendChild(top);
+
+  if (row.reason) mid.appendChild(el("p", "mt-0.5 truncate text-sm text-zinc-400", row.reason));
+
+  const tags = el("div", "mt-2 flex flex-wrap gap-1.5");
+  for (const t of (row.tags || []).slice(0, 5)) {
+    tags.appendChild(el("span", "rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 ring-1 ring-white/5", t));
+  }
+  if (tags.childElementCount) mid.appendChild(tags);
+
+  // right: meta + grade ring + copy
+  const right = el("div", "flex shrink-0 items-center gap-3");
+  const meta = el("div", "hidden text-right sm:block");
+  meta.appendChild(el("div", "num-tnum text-xs text-zinc-500", "score " + (row.score ?? "—")));
+  if (state.view === "now") {
+    const age = row.age_days === 0 ? "today" : `${row.age_days}d old`;
+    meta.appendChild(el("div", "text-[11px] text-zinc-600", age));
+  }
+  right.appendChild(meta);
+  right.appendChild(gradeRing(row.grade));
+
+  const copy = el(
+    "button",
+    "grid h-9 w-9 place-items-center rounded-lg border border-white/5 bg-ink-850 text-zinc-400 transition hover:text-white hover:border-white/15 focus-visible:ring-2 focus-visible:ring-vf-red/40"
+  );
+  copy.setAttribute("aria-label", `Copy ${row.msisdn}`);
+  copy.innerHTML = `<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>`;
+  copy.addEventListener("click", () => {
+    const done = () => {
+      copy.classList.add("text-emerald-400", "border-emerald-500/40");
+      copy.innerHTML = `<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>`;
+      setTimeout(() => {
+        copy.classList.remove("text-emerald-400", "border-emerald-500/40");
+        copy.innerHTML = `<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>`;
+      }, 1500);
+    };
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(row.msisdn).then(done, done);
+    else done();
+  });
+  right.appendChild(copy);
+
+  root.append(rank, mid, right);
+  return root;
+}
+
+function skeleton() {
+  const list = $("list");
+  list.innerHTML = "";
+  for (let i = 0; i < 6; i++) {
+    const s = el("div", "shimmer relative h-[78px] overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60");
+    list.appendChild(s);
   }
 }
 
-/* ================================================================
-   INIT
-   ================================================================ */
+function showEmpty(title, sub) {
+  $("list").innerHTML = "";
+  const e = $("empty");
+  e.innerHTML = "";
+  e.classList.remove("hidden");
+  e.appendChild(el("p", "text-sm font-semibold text-zinc-300", title));
+  if (sub) e.appendChild(el("p", "mt-1 text-xs text-zinc-500", sub));
+}
 
-/**
- * Entry point — runs once the DOM is ready.
- */
-document.addEventListener("DOMContentLoaded", () => {
-  wireEvents();
-  loadData();
+function renderList() {
+  const list = $("list");
+  const empty = $("empty");
+  empty.classList.add("hidden");
 
-  // Refresh the "updated X min ago" timestamp every 30 seconds
-  // so it stays accurate without reloading data
-  setInterval(renderHeader, 30_000);
-});
+  if (state.error) {
+    showEmpty("Couldn't load data", "The dashboard data isn't published yet, or the network failed. It refreshes automatically.");
+    $("count").textContent = "";
+    return;
+  }
+  if (!state.latest) {
+    skeleton();
+    return;
+  }
+
+  const rows = currentRows();
+  $("count").textContent = `${rows.length} number${rows.length === 1 ? "" : "s"}` +
+    (state.filter.replace(/\D/g, "") ? " · filtered" : "");
+
+  if (rows.length === 0) {
+    showEmpty("No matches", state.filter ? "Try a different digit sequence." : "Nothing to show yet.");
+    return;
+  }
+
+  list.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  rows.forEach((r, i) => frag.appendChild(card(r, i)));
+  list.appendChild(frag);
+}
+
+/* ----------------------------- tabs / controls ----------------------------- */
+
+function setView(v) {
+  state.view = v;
+  const now = v === "now";
+  const tabNow = $("tab-now"), tabEver = $("tab-ever");
+  tabNow.setAttribute("aria-selected", String(now));
+  tabEver.setAttribute("aria-selected", String(!now));
+  const on = "bg-vf-red text-white shadow";
+  const off = "text-zinc-400";
+  tabNow.className = `rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${now ? on : off}`;
+  tabEver.className = `rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${now ? off : on}`;
+  renderList();
+}
+
+function wire() {
+  $("tab-now").addEventListener("click", () => setView("now"));
+  $("tab-ever").addEventListener("click", () => setView("ever"));
+  $("filter").addEventListener("input", (e) => { state.filter = e.target.value; renderList(); });
+  $("sort").addEventListener("change", (e) => { state.sort = e.target.value; renderList(); });
+  setView("now");
+  skeleton();
+  load();
+  setInterval(renderHeader, 30000);
+}
+
+wire();
