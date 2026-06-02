@@ -51,7 +51,7 @@ Set as workflow `env:` or repo variables (all optional):
 |---|---|---|
 | `MODEL` | `openai/gpt-4o-mini` | GitHub Models model (keep a low tier for daily caps) |
 | `ALERT_THRESHOLD` | `90` | Min grade for a NEW number to open an Issue |
-| `CANDIDATE_COUNT` | `80` | How many top-scored numbers the LLM ranks |
+| `CANDIDATE_COUNT` | `150` | How many top-scored numbers the LLM ranks |
 | `BEST_COUNT` | `30` | How many to surface |
 
 ## Dashboard CSS

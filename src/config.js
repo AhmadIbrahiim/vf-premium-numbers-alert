@@ -27,7 +27,7 @@ export const MODEL = process.env.MODEL || "openai/gpt-4o-mini";
 export const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "";
 
 /** How many candidates we hand the LLM, and how many we surface. */
-export const CANDIDATE_COUNT = Number(process.env.CANDIDATE_COUNT || 80);
+export const CANDIDATE_COUNT = Number(process.env.CANDIDATE_COUNT || 150);
 export const BEST_COUNT = Number(process.env.BEST_COUNT || 30);
 
 /** A NEW number must grade >= this to trigger an alert Issue. */

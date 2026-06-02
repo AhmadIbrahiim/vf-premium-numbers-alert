@@ -98,6 +98,57 @@ export function appendEvents(events, { today, generatedAt, diff }) {
   return [...events, ...additions].slice(-MAX_EVENTS);
 }
 
+/**
+ * Pure. Build the LLM candidate set: the top `count` by deterministic score,
+ * PLUS any new numbers not already in that top set (so a new arrival is never
+ * skipped from grading even if it scores low). Deduped, all currently available.
+ *
+ * @param {object} p
+ * @param {string[]} p.available           available msisdns this run
+ * @param {Map<string,{score:number,tags:string[]}>} p.scoreMap
+ * @param {string[]} [p.newMsisdns]        new-this-run msisdns (always included)
+ * @param {number} p.count                 size of the top-by-score slice
+ * @returns {Array<{msisdn:string, score:number, tags:string[]}>}
+ */
+export function buildCandidates({ available, scoreMap, newMsisdns = [], count }) {
+  const availSet = new Set(available);
+  const pick = (m) => ({ msisdn: m, ...(scoreMap.get(m) || { score: 0, tags: [] }) });
+  const top = available
+    .map(pick)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, count);
+  const inTop = new Set(top.map((c) => c.msisdn));
+  const extras = newMsisdns.filter((m) => availSet.has(m) && !inTop.has(m)).map(pick);
+  return [...top, ...extras];
+}
+
+/** A stable signature of a candidate set: its msisdns, order-independent. */
+export function candidateSignature(candidates) {
+  return candidates
+    .map((c) => c.msisdn)
+    .sort()
+    .join(",");
+}
+
+/**
+ * Whether cached LLM grades can be reused: same candidate signature and a
+ * non-empty cached result. Lets idle runs skip the LLM call entirely.
+ */
+export function gradeCacheValid(prev, sig) {
+  return Boolean(prev && prev.sig === sig && Array.isArray(prev.graded) && prev.graded.length);
+}
+
+/** Read the cached grades blob ({ sig, graded }) or null. */
+export async function readGrades(dir) {
+  return readJson(join(dir, "grades.json"), null);
+}
+
+/** Persist the cached grades blob. */
+export async function writeGrades(dir, blob) {
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "grades.json"), JSON.stringify(blob));
+}
+
 /** Write all state + dashboard data files to `dir` (creating it if needed). */
 export async function writeState(dir, { history, latest, events }) {
   await mkdir(dir, { recursive: true });

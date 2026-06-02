@@ -6,7 +6,10 @@ import { fetchCatalog } from "./fetch.js";
 import { scoreMsisdn } from "./score.js";
 import { computeDiff } from "./diff.js";
 import { gradeCandidates } from "./grade.js";
-import { readState, updateHistory, buildLatest, appendEvents, writeState } from "./store.js";
+import {
+  readState, updateHistory, buildLatest, appendEvents, writeState,
+  buildCandidates, candidateSignature, gradeCacheValid, readGrades, writeGrades,
+} from "./store.js";
 import { notify } from "./notify.js";
 import {
   DATA_DIR, MODEL, GITHUB_TOKEN, REPO,
@@ -71,15 +74,30 @@ export async function run({ fetchImpl } = {}) {
   }
 
   // 4. candidates -> LLM grade -> best thirty
-  const candidates = [...available]
-    .map((m) => ({ msisdn: m, ...scoreMap.get(m) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, CANDIDATE_COUNT);
-  const graded = await gradeCandidates(candidates, {
-    token: GITHUB_TOKEN, model: MODEL, count: BEST_COUNT,
+  // Candidates = top-N by deterministic score, plus all NEW numbers (never skip a
+  // fresh arrival). The LLM only runs when this candidate set changed since last
+  // run; otherwise we reuse cached grades (saves ~99% of calls on idle runs).
+  const candidates = buildCandidates({
+    available, scoreMap,
+    newMsisdns: diff.isBaseline ? [] : diff.newMsisdns,
+    count: CANDIDATE_COUNT,
   });
-  // attach tags/score back onto graded entries for the dashboard
-  const bestThirty = graded.map((g) => ({ ...scoreMap.get(g.msisdn), ...g }));
+  const candSig = candidateSignature(candidates);
+  const prevGrades = await readGrades(DATA_DIR);
+  let graded, regraded;
+  if (gradeCacheValid(prevGrades, candSig)) {
+    graded = prevGrades.graded;
+    regraded = false;
+  } else {
+    graded = await gradeCandidates(candidates, { token: GITHUB_TOKEN, model: MODEL, count: BEST_COUNT });
+    await writeGrades(DATA_DIR, { sig: candSig, graded });
+    regraded = true;
+  }
+  // attach tags/score back onto graded entries; drop any no longer available.
+  const availableSet = new Set(available);
+  const bestThirty = graded
+    .filter((g) => availableSet.has(g.msisdn))
+    .map((g) => ({ ...(scoreMap.get(g.msisdn) || {}), ...g }));
   const gradeMap = new Map(bestThirty.map((c) => [c.msisdn, c.grade]));
 
   // 5. persist
@@ -108,7 +126,8 @@ export async function run({ fetchImpl } = {}) {
   await summary(
     `✅ run ok | total=${totalElements} available=${available.length} ` +
     `new=${diff.newMsisdns.length} gone=${diff.disappearedMsisdns.length} ` +
-    `baseline=${diff.isBaseline} alerts=${newPremium.length} (${notifyResult}) changed=${changed}`
+    `baseline=${diff.isBaseline} llm=${regraded ? "graded" : "cached"} ` +
+    `alerts=${newPremium.length} (${notifyResult}) changed=${changed}`
   );
   return { changed, diff, newPremium, notifyResult };
 }
