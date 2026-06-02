@@ -2,8 +2,8 @@ name: poll-vf-numbers
 
 on:
   schedule:
-    # Best-effort every 10 minutes (GitHub may delay/skip under load).
-    - cron: "*/10 * * * *"
+    # Every 10 minutes, offset from peak boundaries to reduce scheduler drops.
+    - cron: "3,13,23,33,43,53 * * * *"
   push:
     branches: [main]
     paths: ["web/**", "src/**", ".github/workflows/poll.yml"]
@@ -12,7 +12,8 @@ on:
 # Never let two runs race the gh-pages push.
 concurrency:
   group: poll
-  cancel-in-progress: false
+  # Keep the freshest poll if one run stalls and overlaps the next schedule tick.
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -22,6 +23,7 @@ permissions:
 jobs:
   poll:
     runs-on: ubuntu-latest
+    timeout-minutes: 9
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
