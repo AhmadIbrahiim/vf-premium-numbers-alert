@@ -1,143 +1,131 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="en" class="dark">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Live dashboard of premium Vodafone Egypt mobile numbers — ranked by pattern score and AI grade." />
-  <meta name="color-scheme" content="dark" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>VF Premium Numbers</title>
+  <meta name="description" content="Premium Vodafone Egypt numbers, graded by digit pattern and refreshed continuously." />
 
-  <!-- All styling is local — no external CDN requests -->
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            vf: { red: "#e60000", redsoft: "#ff4d4d" },
+            ink: { 950: "#08080a", 900: "#0c0c0f", 850: "#111114", 800: "#16161b", 700: "#1f1f26" },
+          },
+          fontFamily: {
+            sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+            mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
+          },
+          keyframes: {
+            fadeUp: { "0%": { opacity: 0, transform: "translateY(8px)" }, "100%": { opacity: 1, transform: "translateY(0)" } },
+            pulse2: { "0%,100%": { opacity: 1, transform: "scale(1)" }, "50%": { opacity: 0.35, transform: "scale(0.7)" } },
+          },
+          animation: {
+            fadeUp: "fadeUp .45s cubic-bezier(.21,.6,.35,1) both",
+            pulse2: "pulse2 1.8s ease-in-out infinite",
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    :root { color-scheme: dark; }
+    html { scroll-behavior: smooth; }
+    body { background:
+      radial-gradient(1200px 600px at 75% -10%, rgba(230,0,0,.16), transparent 60%),
+      radial-gradient(900px 500px at 0% 0%, rgba(120,120,255,.06), transparent 55%),
+      #08080a; }
+    @keyframes shimmer { 100% { transform: translateX(100%); } }
+    .shimmer::after { content:""; position:absolute; inset:0; transform:translateX(-100%);
+      background:linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent);
+      animation: shimmer 1.4s infinite; }
+    .num-tnum { font-variant-numeric: tabular-nums; }
+    ::-webkit-scrollbar { width:10px; height:10px; }
+    ::-webkit-scrollbar-thumb { background:#26262e; border-radius:9999px; border:2px solid #0c0c0f; }
+    @media (prefers-reduced-motion: reduce) { *{ animation:none !important; scroll-behavior:auto; } }
+  </style>
 </head>
-<body>
 
-  <!-- ============================================================
-       HEADER
-       ============================================================ -->
-  <header class="site-header" role="banner">
-    <div class="header-inner">
-
-      <!-- Brand -->
-      <div class="header-brand">
-        <div class="brand-icon" aria-hidden="true">VF</div>
-        <div>
-          <div class="brand-title">VF Premium Numbers</div>
-          <div class="brand-subtitle">Vodafone Egypt · Pattern Monitor</div>
+<body class="min-h-screen font-sans text-zinc-200 antialiased selection:bg-vf-red/30">
+  <!-- Header -->
+  <header class="sticky top-0 z-30 border-b border-white/5 bg-ink-950/70 backdrop-blur-xl">
+    <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 sm:px-6">
+      <div class="flex items-center gap-3">
+        <div class="grid h-10 w-10 place-items-center rounded-xl bg-vf-red font-extrabold text-white shadow-lg shadow-vf-red/30 ring-1 ring-white/10">VF</div>
+        <div class="leading-tight">
+          <h1 class="text-[15px] font-bold tracking-tight text-white">Premium Numbers</h1>
+          <p class="text-[11px] text-zinc-500">Vodafone Egypt · pattern monitor</p>
         </div>
       </div>
 
-      <!-- Last updated -->
-      <div class="last-updated" id="last-updated" aria-live="polite" aria-label="Data last updated">
-        updated <span>—</span>
+      <div class="flex items-center gap-2 text-xs text-zinc-400">
+        <span class="relative flex h-2 w-2" aria-hidden="true">
+          <span class="absolute inline-flex h-2 w-2 animate-pulse2 rounded-full bg-emerald-400"></span>
+          <span class="inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+        </span>
+        <span id="updated" aria-live="polite">loading…</span>
       </div>
 
-      <!-- Stat chips -->
-      <nav class="header-stats" aria-label="Summary statistics">
-        <div class="stat-chip" title="Total premium numbers in catalog">
-          <span aria-hidden="true">📋</span>
-          <span class="chip-label">Total</span>
-          <strong class="chip-value" id="stat-total" aria-label="Total numbers">—</strong>
+      <div class="ml-auto flex flex-wrap items-center gap-2">
+        <div class="flex items-center gap-2 rounded-lg border border-white/5 bg-ink-850 px-3 py-1.5">
+          <span class="text-[11px] uppercase tracking-wide text-zinc-500">Total</span>
+          <span id="stat-total" class="num-tnum text-sm font-bold text-white">—</span>
         </div>
-        <div class="stat-chip chip-new" title="New numbers found this run">
-          <span aria-hidden="true">✦</span>
-          <span class="chip-label">New</span>
-          <strong class="chip-value" id="stat-new" aria-label="New this run">—</strong>
+        <div class="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5">
+          <span class="text-[11px] uppercase tracking-wide text-emerald-400/80">New</span>
+          <span id="stat-new" class="num-tnum text-sm font-bold text-emerald-300">—</span>
         </div>
-        <div class="stat-chip chip-gone" title="Numbers that disappeared this run">
-          <span aria-hidden="true">↓</span>
-          <span class="chip-label">Gone</span>
-          <strong class="chip-value" id="stat-gone" aria-label="Disappeared this run">—</strong>
+        <div class="flex items-center gap-2 rounded-lg border border-white/5 bg-ink-850 px-3 py-1.5">
+          <span class="text-[11px] uppercase tracking-wide text-zinc-500">Gone</span>
+          <span id="stat-gone" class="num-tnum text-sm font-bold text-zinc-400">—</span>
         </div>
-      </nav>
-
+      </div>
     </div>
   </header>
 
-  <!-- ============================================================
-       MAIN CONTENT
-       ============================================================ -->
-  <main id="main-content" role="main">
-
-    <!-- Controls: view toggle, filter, sort -->
-    <section class="controls" aria-label="View controls">
-
-      <!-- Tab toggle: best-now vs best-ever -->
-      <div class="tab-group" role="tablist" aria-label="Number view">
-        <button
-          class="tab-btn"
-          role="tab"
-          data-view="best-now"
-          aria-selected="true"
-          aria-controls="list-container"
-          id="tab-best-now"
-        >Best available now</button>
-        <button
-          class="tab-btn"
-          role="tab"
-          data-view="best-ever"
-          aria-selected="false"
-          aria-controls="list-container"
-          id="tab-best-ever"
-        >Best ever seen</button>
+  <main class="mx-auto max-w-6xl px-4 pb-24 pt-6 sm:px-6">
+    <!-- Controls -->
+    <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div role="tablist" aria-label="Views" class="inline-flex shrink-0 rounded-xl border border-white/5 bg-ink-850 p-1">
+        <button id="tab-now" role="tab" aria-selected="true"
+          class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition">Best available now</button>
+        <button id="tab-ever" role="tab" aria-selected="false"
+          class="rounded-lg px-3.5 py-1.5 text-sm font-medium text-zinc-400 transition">Best ever seen</button>
       </div>
 
-      <!-- Digit filter -->
-      <div class="filter-wrap">
-        <span class="filter-icon" aria-hidden="true">⌕</span>
-        <input
-          id="filter-input"
-          class="filter-input"
-          type="search"
-          inputmode="numeric"
-          placeholder="Filter by digits…"
-          aria-label="Filter numbers by digit pattern"
-          autocomplete="off"
-          spellcheck="false"
-        />
+      <div class="relative flex-1">
+        <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="filter" type="search" inputmode="numeric" placeholder="Filter by digits…"
+          aria-label="Filter by digits"
+          class="w-full rounded-xl border border-white/5 bg-ink-850 py-2 pl-9 pr-3 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none transition focus-visible:border-vf-red/50 focus-visible:ring-2 focus-visible:ring-vf-red/30" />
       </div>
 
-      <!-- Sort control -->
-      <select
-        id="sort-select"
-        class="sort-select"
-        aria-label="Sort numbers by"
-      >
+      <select id="sort" aria-label="Sort by"
+        class="shrink-0 rounded-xl border border-white/5 bg-ink-850 px-3 py-2 text-sm text-zinc-300 outline-none transition focus-visible:border-vf-red/50 focus-visible:ring-2 focus-visible:ring-vf-red/30">
         <option value="grade">Sort: Grade</option>
         <option value="score">Sort: Score</option>
-        <option value="newest">Sort: Newest first</option>
+        <option value="new">Sort: Newest</option>
       </select>
-
-    </section>
-
-    <!-- Results count -->
-    <p class="results-count" id="results-count" aria-live="polite" aria-atomic="true"></p>
-
-    <!-- List / cards area — replaced by JS -->
-    <div
-      id="list-container"
-      role="region"
-      aria-label="Premium numbers list"
-      aria-live="polite"
-    >
-      <!-- Content injected by app.js -->
     </div>
 
+    <p id="count" class="mb-3 text-xs text-zinc-500" aria-live="polite"></p>
+    <div id="list" class="space-y-2.5"></div>
+    <div id="empty" class="hidden rounded-2xl border border-dashed border-white/10 bg-ink-900/50 p-12 text-center"></div>
   </main>
 
-  <!-- ============================================================
-       FOOTER
-       ============================================================ -->
-  <footer class="site-footer" role="contentinfo">
-    <p>
-      Data scraped from <strong>Vodafone Egypt</strong>'s public catalog.
-      Cadence is best-effort (~10–20 min).
-      Numbers ranked by AI-assisted pattern analysis. Price is flat 350 EGP.
-    </p>
+  <footer class="border-t border-white/5 py-6 text-center text-[11px] text-zinc-600">
+    Data from Vodafone Egypt's public catalog · cadence is best-effort (~10–20 min) ·
+    grades reflect digit-pattern desirability
   </footer>
 
-  <!-- App script — loaded after DOM is ready -->
   <script src="./app.js"></script>
-
 </body>
 </html>
