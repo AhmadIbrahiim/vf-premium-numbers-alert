@@ -55,7 +55,8 @@ jobs:
 
       - name: Copy dashboard into public/
         run: |
-          cp web/index.html web/app.js web/styles.css public/
+          cp web/index.html web/app.js public/
+          rm -f public/styles.css
           touch public/.nojekyll
 
       - name: Commit & push to gh-pages
