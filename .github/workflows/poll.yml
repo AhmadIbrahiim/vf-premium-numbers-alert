@@ -55,7 +55,7 @@ jobs:
 
       - name: Copy dashboard into public/
         run: |
-          cp web/index.html web/app.js public/
+          cp web/index.html web/app.js web/tailwind.css public/
           rm -f public/styles.css
           touch public/.nojekyll
 

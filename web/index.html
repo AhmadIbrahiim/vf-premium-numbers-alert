@@ -10,63 +10,52 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
 
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Pre-paint theme: avoids a flash of the wrong theme. -->
   <script>
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          colors: {
-            vf: { red: "#e60000", redsoft: "#ff4d4d" },
-            ink: { 950: "#08080a", 900: "#0c0c0f", 850: "#111114", 800: "#16161b", 700: "#1f1f26" },
-          },
-          fontFamily: {
-            sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
-            mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
-          },
-          keyframes: {
-            fadeUp: { "0%": { opacity: 0, transform: "translateY(8px)" }, "100%": { opacity: 1, transform: "translateY(0)" } },
-            pulse2: { "0%,100%": { opacity: 1, transform: "scale(1)" }, "50%": { opacity: 0.35, transform: "scale(0.7)" } },
-          },
-          animation: {
-            fadeUp: "fadeUp .45s cubic-bezier(.21,.6,.35,1) both",
-            pulse2: "pulse2 1.8s ease-in-out infinite",
-          },
-        },
-      },
-    };
+    (function () {
+      try {
+        var t = localStorage.getItem("theme");
+        var dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.classList.toggle("dark", dark);
+      } catch (e) { document.documentElement.classList.add("dark"); }
+    })();
   </script>
+
+  <link rel="stylesheet" href="./tailwind.css" />
   <style>
-    :root { color-scheme: dark; }
     html { scroll-behavior: smooth; }
     body { background:
+      radial-gradient(1000px 520px at 80% -10%, rgba(230,0,0,.08), transparent 60%),
+      #fafafa; }
+    .dark body { background:
       radial-gradient(1200px 600px at 75% -10%, rgba(230,0,0,.16), transparent 60%),
       radial-gradient(900px 500px at 0% 0%, rgba(120,120,255,.06), transparent 55%),
       #08080a; }
     @keyframes shimmer { 100% { transform: translateX(100%); } }
     .shimmer::after { content:""; position:absolute; inset:0; transform:translateX(-100%);
-      background:linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent);
+      background:linear-gradient(90deg,transparent,rgba(125,125,125,.12),transparent);
       animation: shimmer 1.4s infinite; }
     .num-tnum { font-variant-numeric: tabular-nums; }
     ::-webkit-scrollbar { width:10px; height:10px; }
-    ::-webkit-scrollbar-thumb { background:#26262e; border-radius:9999px; border:2px solid #0c0c0f; }
+    ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:9999px; border:2px solid transparent; background-clip:content-box; }
+    .dark ::-webkit-scrollbar-thumb { background:#26262e; background-clip:content-box; }
     @media (prefers-reduced-motion: reduce) { *{ animation:none !important; scroll-behavior:auto; } }
   </style>
 </head>
 
-<body class="min-h-screen font-sans text-zinc-200 antialiased selection:bg-vf-red/30">
+<body class="min-h-screen bg-zinc-50 font-sans text-zinc-700 antialiased selection:bg-vf-red/30 dark:text-zinc-200">
   <!-- Header -->
-  <header class="sticky top-0 z-30 border-b border-white/5 bg-ink-950/70 backdrop-blur-xl">
+  <header class="sticky top-0 z-30 border-b border-zinc-200 bg-white/75 backdrop-blur-xl dark:border-white/5 dark:bg-ink-950/70">
     <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 sm:px-6">
       <div class="flex items-center gap-3">
-        <div class="grid h-10 w-10 place-items-center rounded-xl bg-vf-red font-extrabold text-white shadow-lg shadow-vf-red/30 ring-1 ring-white/10">VF</div>
+        <div class="grid h-10 w-10 place-items-center rounded-xl bg-vf-red font-extrabold text-white shadow-lg shadow-vf-red/30 ring-1 ring-black/5 dark:ring-white/10">VF</div>
         <div class="leading-tight">
-          <h1 class="text-[15px] font-bold tracking-tight text-white">Premium Numbers</h1>
+          <h1 class="text-[15px] font-bold tracking-tight text-zinc-900 dark:text-white">Premium Numbers</h1>
           <p class="text-[11px] text-zinc-500">Vodafone Egypt · pattern monitor</p>
         </div>
       </div>
 
-      <div class="flex items-center gap-2 text-xs text-zinc-400">
+      <div class="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
         <span class="relative flex h-2 w-2" aria-hidden="true">
           <span class="absolute inline-flex h-2 w-2 animate-pulse2 rounded-full bg-emerald-400"></span>
           <span class="inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
@@ -75,18 +64,23 @@
       </div>
 
       <div class="ml-auto flex flex-wrap items-center gap-2">
-        <div class="flex items-center gap-2 rounded-lg border border-white/5 bg-ink-850 px-3 py-1.5">
+        <div class="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 dark:border-white/5 dark:bg-ink-850">
           <span class="text-[11px] uppercase tracking-wide text-zinc-500">Total</span>
-          <span id="stat-total" class="num-tnum text-sm font-bold text-white">—</span>
+          <span id="stat-total" class="num-tnum text-sm font-bold text-zinc-900 dark:text-white">—</span>
         </div>
-        <div class="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5">
-          <span class="text-[11px] uppercase tracking-wide text-emerald-400/80">New</span>
-          <span id="stat-new" class="num-tnum text-sm font-bold text-emerald-300">—</span>
+        <div class="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 dark:border-emerald-500/20 dark:bg-emerald-500/5">
+          <span class="text-[11px] uppercase tracking-wide text-emerald-700/80 dark:text-emerald-400/80">New</span>
+          <span id="stat-new" class="num-tnum text-sm font-bold text-emerald-600 dark:text-emerald-300">—</span>
         </div>
-        <div class="flex items-center gap-2 rounded-lg border border-white/5 bg-ink-850 px-3 py-1.5">
+        <div class="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 dark:border-white/5 dark:bg-ink-850">
           <span class="text-[11px] uppercase tracking-wide text-zinc-500">Gone</span>
-          <span id="stat-gone" class="num-tnum text-sm font-bold text-zinc-400">—</span>
+          <span id="stat-gone" class="num-tnum text-sm font-bold text-zinc-500 dark:text-zinc-400">—</span>
         </div>
+        <button id="theme" type="button" aria-label="Toggle theme"
+          class="grid h-9 w-9 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition hover:text-zinc-900 dark:border-white/5 dark:bg-ink-850 dark:text-zinc-400 dark:hover:text-white focus-visible:ring-2 focus-visible:ring-vf-red/40">
+          <svg class="hidden h-4 w-4 dark:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          <svg class="block h-4 w-4 dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        </button>
       </div>
     </div>
   </header>
@@ -94,34 +88,35 @@
   <main class="mx-auto max-w-6xl px-4 pb-24 pt-6 sm:px-6">
     <!-- Controls -->
     <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-      <div role="tablist" aria-label="Views" class="inline-flex shrink-0 rounded-xl border border-white/5 bg-ink-850 p-1">
+      <div role="tablist" aria-label="Views" class="inline-flex shrink-0 rounded-xl border border-zinc-200 bg-zinc-100 p-1 dark:border-white/5 dark:bg-ink-850">
         <button id="tab-now" role="tab" aria-selected="true"
           class="rounded-lg px-3.5 py-1.5 text-sm font-medium transition">Best available now</button>
         <button id="tab-ever" role="tab" aria-selected="false"
-          class="rounded-lg px-3.5 py-1.5 text-sm font-medium text-zinc-400 transition">Best ever seen</button>
+          class="rounded-lg px-3.5 py-1.5 text-sm font-medium text-zinc-500 transition dark:text-zinc-400">Best ever seen</button>
       </div>
 
       <div class="relative flex-1">
-        <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
         <input id="filter" type="search" inputmode="numeric" placeholder="Filter by digits…"
           aria-label="Filter by digits"
-          class="w-full rounded-xl border border-white/5 bg-ink-850 py-2 pl-9 pr-3 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none transition focus-visible:border-vf-red/50 focus-visible:ring-2 focus-visible:ring-vf-red/30" />
+          class="w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm text-zinc-800 placeholder:text-zinc-400 outline-none transition focus-visible:border-vf-red/50 focus-visible:ring-2 focus-visible:ring-vf-red/30 dark:border-white/5 dark:bg-ink-850 dark:text-zinc-200 dark:placeholder:text-zinc-600" />
       </div>
 
       <select id="sort" aria-label="Sort by"
-        class="shrink-0 rounded-xl border border-white/5 bg-ink-850 px-3 py-2 text-sm text-zinc-300 outline-none transition focus-visible:border-vf-red/50 focus-visible:ring-2 focus-visible:ring-vf-red/30">
+        class="shrink-0 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 outline-none transition focus-visible:border-vf-red/50 focus-visible:ring-2 focus-visible:ring-vf-red/30 dark:border-white/5 dark:bg-ink-850 dark:text-zinc-300">
         <option value="grade">Sort: Grade</option>
         <option value="score">Sort: Score</option>
         <option value="new">Sort: Newest</option>
       </select>
     </div>
 
+    <div id="podium" class="mb-4 hidden gap-3 sm:grid sm:grid-cols-3"></div>
     <p id="count" class="mb-3 text-xs text-zinc-500" aria-live="polite"></p>
     <div id="list" class="space-y-2.5"></div>
-    <div id="empty" class="hidden rounded-2xl border border-dashed border-white/10 bg-ink-900/50 p-12 text-center"></div>
+    <div id="empty" class="hidden rounded-2xl border border-dashed border-zinc-300 bg-white/60 p-12 text-center dark:border-white/10 dark:bg-ink-900/50"></div>
   </main>
 
-  <footer class="border-t border-white/5 py-6 text-center text-[11px] text-zinc-600">
+  <footer class="border-t border-zinc-200 py-6 text-center text-[11px] text-zinc-500 dark:border-white/5 dark:text-zinc-600">
     Data from Vodafone Egypt's public catalog · cadence is best-effort (~10–20 min) ·
     grades reflect digit-pattern desirability
   </footer>

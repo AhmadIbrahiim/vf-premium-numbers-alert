@@ -1,10 +1,10 @@
 /**
- * app.js — VF Premium Numbers Dashboard (Tailwind)
+ * app.js — VF Premium Numbers Dashboard (Tailwind, light/dark, podium)
  *
  * Fetches ./latest.json and ./history.json (same-origin, no-store), then renders
- * a ranked, filterable, sortable view of premium Egyptian mobile numbers.
- * Two views: "best available now" (latest.best_thirty) and "best ever seen"
- * (computed from history.json by best_grade). XSS-safe: text via textContent only.
+ * a ranked, filterable, sortable view. Top 3 show as a podium; the rest as a list.
+ * Two views: "best available now" and "best ever seen" (from history by best_grade).
+ * XSS-safe: all dynamic text goes through textContent; innerHTML only for static SVG.
  */
 
 const state = {
@@ -20,12 +20,10 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 
-/** Format an MSISDN as 0100 000 0000 for readability. */
 function fmt(m) {
   return `${m.slice(0, 4)} ${m.slice(4, 7)} ${m.slice(7)}`;
 }
 
-/** Relative time like "4 min ago". */
 function relTime(iso) {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return "unknown";
@@ -38,19 +36,19 @@ function relTime(iso) {
   return `${Math.round(h / 24)} d ago`;
 }
 
-/** Grade -> Tailwind color classes {ring, text, chipBg, chipText}. */
+/** Grade -> { ring hex, text classes (light+dark) }. */
 function gradeStyle(g) {
-  if (g >= 95) return { ring: "#10b981", text: "text-emerald-300", chip: "bg-emerald-500/10 text-emerald-300 ring-emerald-500/20" };
-  if (g >= 90) return { ring: "#22c55e", text: "text-green-300", chip: "bg-green-500/10 text-green-300 ring-green-500/20" };
-  if (g >= 85) return { ring: "#84cc16", text: "text-lime-300", chip: "bg-lime-500/10 text-lime-300 ring-lime-500/20" };
-  if (g >= 80) return { ring: "#eab308", text: "text-amber-300", chip: "bg-amber-500/10 text-amber-300 ring-amber-500/20" };
-  return { ring: "#f97316", text: "text-orange-300", chip: "bg-orange-500/10 text-orange-300 ring-orange-500/20" };
+  if (g >= 95) return { ring: "#10b981", text: "text-emerald-600 dark:text-emerald-300" };
+  if (g >= 90) return { ring: "#22c55e", text: "text-green-600 dark:text-green-300" };
+  if (g >= 85) return { ring: "#65a30d", text: "text-lime-600 dark:text-lime-300" };
+  if (g >= 80) return { ring: "#d97706", text: "text-amber-600 dark:text-amber-300" };
+  return { ring: "#ea580c", text: "text-orange-600 dark:text-orange-300" };
 }
 
 const RANK_BADGE = [
-  "bg-gradient-to-br from-amber-300 to-yellow-600 text-black", // 1
-  "bg-gradient-to-br from-zinc-200 to-zinc-400 text-black", // 2
-  "bg-gradient-to-br from-amber-600 to-amber-800 text-white", // 3
+  "bg-gradient-to-br from-amber-300 to-yellow-600 text-black",
+  "bg-gradient-to-br from-zinc-200 to-zinc-400 text-black",
+  "bg-gradient-to-br from-amber-600 to-amber-800 text-white",
 ];
 
 function el(tag, cls, text) {
@@ -60,20 +58,62 @@ function el(tag, cls, text) {
   return n;
 }
 
-/** Circular grade ring (SVG), 0-100. */
-function gradeRing(grade) {
+/** Circular grade ring (SVG). `size` in px. Neutral track works on both themes. */
+function gradeRing(grade, size = 56) {
   const { ring, text } = gradeStyle(grade);
-  const r = 22, c = 2 * Math.PI * r, off = c * (1 - Math.max(0, Math.min(100, grade)) / 100);
-  const wrap = el("div", "relative grid h-14 w-14 shrink-0 place-items-center");
+  const r = (size - 12) / 2;
+  const c = 2 * Math.PI * r;
+  const off = c * (1 - Math.max(0, Math.min(100, grade)) / 100);
+  const fs = size >= 72 ? "text-xl" : "text-base";
+  const wrap = el("div", "relative grid shrink-0 place-items-center");
+  wrap.style.height = wrap.style.width = `${size}px`;
   wrap.innerHTML =
-    `<svg class="h-14 w-14 -rotate-90" viewBox="0 0 52 52" aria-hidden="true">` +
-    `<circle cx="26" cy="26" r="${r}" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="4"/>` +
-    `<circle cx="26" cy="26" r="${r}" fill="none" stroke="${ring}" stroke-width="4" stroke-linecap="round" ` +
+    `<svg class="-rotate-90" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">` +
+    `<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="rgba(125,125,125,.22)" stroke-width="4"/>` +
+    `<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${ring}" stroke-width="4" stroke-linecap="round" ` +
     `stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/></svg>`;
-  const lbl = el("span", `absolute num-tnum text-base font-bold ${text}`, String(grade));
-  wrap.appendChild(lbl);
+  wrap.appendChild(el("span", `absolute num-tnum font-bold ${fs} ${text}`, String(grade)));
   wrap.setAttribute("aria-label", `grade ${grade} of 100`);
   return wrap;
+}
+
+function copyButton(msisdn) {
+  const idle = `<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>`;
+  const ok = `<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>`;
+  const b = el(
+    "button",
+    "grid h-9 w-9 place-items-center rounded-lg border border-zinc-200 bg-white text-zinc-400 transition hover:border-zinc-300 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-vf-red/40 dark:border-white/5 dark:bg-ink-850 dark:text-zinc-400 dark:hover:border-white/15 dark:hover:text-white"
+  );
+  b.setAttribute("aria-label", `Copy ${msisdn}`);
+  b.innerHTML = idle;
+  b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const done = () => {
+      b.classList.add("text-emerald-500", "border-emerald-500/40");
+      b.innerHTML = ok;
+      setTimeout(() => {
+        b.classList.remove("text-emerald-500", "border-emerald-500/40");
+        b.innerHTML = idle;
+      }, 1500);
+    };
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(msisdn).then(done, done);
+    else done();
+  });
+  return b;
+}
+
+function badges(parent, row) {
+  if (row.is_new) parent.appendChild(el("span", "rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-300", "New"));
+  if (row.status === "gone") parent.appendChild(el("span", "rounded-md bg-zinc-400/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500 ring-1 ring-zinc-400/30 dark:text-zinc-400", "Gone"));
+  else if (state.view === "ever") parent.appendChild(el("span", "rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700/80 ring-1 ring-emerald-500/20 dark:text-emerald-300/80", "Live"));
+}
+
+function tagPills(row, max) {
+  const tags = el("div", "flex flex-wrap gap-1.5");
+  for (const t of (row.tags || []).slice(0, max)) {
+    tags.appendChild(el("span", "rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 ring-1 ring-zinc-200 dark:bg-white/5 dark:text-zinc-400 dark:ring-white/5", t));
+  }
+  return tags;
 }
 
 /* ----------------------------- data ----------------------------- */
@@ -87,14 +127,13 @@ async function load() {
     state.latest = l;
     state.history = h && typeof h === "object" ? h : {};
     state.error = false;
-  } catch (e) {
+  } catch {
     state.error = true;
   }
   renderHeader();
-  renderList();
+  render();
 }
 
-/** Build "best ever seen" rows from history, sorted by best_grade. */
 function bestEver() {
   const h = state.history || {};
   return Object.entries(h)
@@ -115,10 +154,8 @@ function bestEver() {
 
 function currentRows() {
   let rows = state.view === "now" ? (state.latest?.best_thirty || []).slice() : bestEver();
-
   const f = state.filter.replace(/\D/g, "");
   if (f) rows = rows.filter((r) => r.msisdn.replace(/\D/g, "").includes(f));
-
   const by = state.sort;
   rows.sort((a, b) => {
     if (by === "new") return (b.is_new ? 1 : 0) - (a.is_new ? 1 : 0) || b.grade - a.grade;
@@ -141,83 +178,71 @@ function renderHeader() {
   $("stat-gone").textContent = "-" + (state.latest.disappeared_count ?? 0);
 }
 
-function card(row, i) {
-  const gs = gradeStyle(row.grade);
-  const isGone = row.status === "gone";
-
+/** Full-width ranked row. */
+function row(r, i) {
+  const isGone = r.status === "gone";
   const root = el(
     "div",
-    "group animate-fadeUp relative flex items-center gap-4 rounded-2xl border border-white/5 bg-ink-900/60 p-4 " +
-      "transition hover:border-white/10 hover:bg-ink-850 " +
-      (isGone ? "opacity-60" : "")
+    "group animate-fadeUp relative flex items-center gap-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-zinc-300 hover:shadow-md dark:border-white/5 dark:bg-ink-900/60 dark:shadow-none dark:hover:border-white/10 dark:hover:bg-ink-850" +
+      (isGone ? " opacity-60" : "")
   );
-  root.style.animationDelay = `${Math.min(i * 28, 400)}ms`;
+  root.style.animationDelay = `${Math.min(i * 24, 360)}ms`;
   root.setAttribute("role", "listitem");
 
-  // rank
   const rank = el(
     "div",
     "grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold num-tnum " +
-      (i < 3 ? RANK_BADGE[i] : "bg-ink-700 text-zinc-400"),
+      (i < 3 ? RANK_BADGE[i] : "bg-zinc-200 text-zinc-500 dark:bg-ink-700 dark:text-zinc-400"),
     String(i + 1)
   );
 
-  // middle
   const mid = el("div", "min-w-0 flex-1");
   const top = el("div", "flex flex-wrap items-center gap-2");
-  const number = el("span", "font-mono text-lg font-bold tracking-wide text-white num-tnum", fmt(row.msisdn));
-  top.appendChild(number);
-
-  if (row.is_new) {
-    top.appendChild(el("span", "rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-300 ring-1 ring-emerald-500/30", "New"));
-  }
-  if (isGone) {
-    top.appendChild(el("span", "rounded-md bg-zinc-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-400 ring-1 ring-zinc-500/30", "Gone"));
-  } else if (state.view === "ever") {
-    top.appendChild(el("span", "rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-300/80 ring-1 ring-emerald-500/20", "Live"));
-  }
+  top.appendChild(el("span", "font-mono text-lg font-bold tracking-wide text-zinc-900 num-tnum dark:text-white", fmt(r.msisdn)));
+  badges(top, r);
   mid.appendChild(top);
+  if (r.reason) mid.appendChild(el("p", "mt-0.5 truncate text-sm text-zinc-500 dark:text-zinc-400", r.reason));
+  const tags = tagPills(r, 5);
+  if (tags.childElementCount) { tags.classList.add("mt-2"); mid.appendChild(tags); }
 
-  if (row.reason) mid.appendChild(el("p", "mt-0.5 truncate text-sm text-zinc-400", row.reason));
-
-  const tags = el("div", "mt-2 flex flex-wrap gap-1.5");
-  for (const t of (row.tags || []).slice(0, 5)) {
-    tags.appendChild(el("span", "rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 ring-1 ring-white/5", t));
-  }
-  if (tags.childElementCount) mid.appendChild(tags);
-
-  // right: meta + grade ring + copy
   const right = el("div", "flex shrink-0 items-center gap-3");
   const meta = el("div", "hidden text-right sm:block");
-  meta.appendChild(el("div", "num-tnum text-xs text-zinc-500", "score " + (row.score ?? "—")));
-  if (state.view === "now") {
-    const age = row.age_days === 0 ? "today" : `${row.age_days}d old`;
-    meta.appendChild(el("div", "text-[11px] text-zinc-600", age));
-  }
-  right.appendChild(meta);
-  right.appendChild(gradeRing(row.grade));
-
-  const copy = el(
-    "button",
-    "grid h-9 w-9 place-items-center rounded-lg border border-white/5 bg-ink-850 text-zinc-400 transition hover:text-white hover:border-white/15 focus-visible:ring-2 focus-visible:ring-vf-red/40"
-  );
-  copy.setAttribute("aria-label", `Copy ${row.msisdn}`);
-  copy.innerHTML = `<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>`;
-  copy.addEventListener("click", () => {
-    const done = () => {
-      copy.classList.add("text-emerald-400", "border-emerald-500/40");
-      copy.innerHTML = `<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>`;
-      setTimeout(() => {
-        copy.classList.remove("text-emerald-400", "border-emerald-500/40");
-        copy.innerHTML = `<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>`;
-      }, 1500);
-    };
-    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(row.msisdn).then(done, done);
-    else done();
-  });
-  right.appendChild(copy);
+  meta.appendChild(el("div", "num-tnum text-xs text-zinc-400 dark:text-zinc-500", "score " + (r.score ?? "—")));
+  if (state.view === "now") meta.appendChild(el("div", "text-[11px] text-zinc-400 dark:text-zinc-600", r.age_days === 0 ? "today" : `${r.age_days}d old`));
+  right.append(meta, gradeRing(r.grade, 56), copyButton(r.msisdn));
 
   root.append(rank, mid, right);
+  return root;
+}
+
+/** Elevated podium card for the top 3. */
+function podiumCard(r, i) {
+  // Classic podium: 2nd left, 1st centered + elevated, 3rd right.
+  const order = ["sm:order-2 sm:-translate-y-3", "sm:order-1", "sm:order-3"][i];
+  const emphasis = i === 0 ? "ring-2 ring-vf-red/40 dark:ring-vf-red/50" : "ring-1 ring-zinc-200 dark:ring-white/5";
+  const root = el(
+    "div",
+    `group animate-fadeUp relative flex flex-col items-center gap-3 rounded-2xl border border-transparent bg-white p-5 text-center shadow-sm transition hover:shadow-md dark:bg-ink-900/70 ${emphasis} ${order}`
+  );
+  root.style.animationDelay = `${i * 60}ms`;
+
+  const medal = el(
+    "div",
+    "grid h-8 w-8 place-items-center rounded-full text-sm font-extrabold num-tnum " + RANK_BADGE[i],
+    String(i + 1)
+  );
+  root.appendChild(medal);
+  root.appendChild(gradeRing(r.grade, i === 0 ? 80 : 68));
+  root.appendChild(el("div", "font-mono text-lg font-bold tracking-wide text-zinc-900 num-tnum dark:text-white", fmt(r.msisdn)));
+
+  const flags = el("div", "flex flex-wrap items-center justify-center gap-1.5");
+  badges(flags, r);
+  if (flags.childElementCount) root.appendChild(flags);
+
+  if (r.reason) root.appendChild(el("p", "text-xs text-zinc-500 dark:text-zinc-400", r.reason));
+  const tags = tagPills(r, 3);
+  if (tags.childElementCount) { tags.classList.add("justify-center"); root.appendChild(tags); }
+  root.appendChild(copyButton(r.msisdn));
   return root;
 }
 
@@ -225,70 +250,79 @@ function skeleton() {
   const list = $("list");
   list.innerHTML = "";
   for (let i = 0; i < 6; i++) {
-    const s = el("div", "shimmer relative h-[78px] overflow-hidden rounded-2xl border border-white/5 bg-ink-900/60");
-    list.appendChild(s);
+    list.appendChild(el("div", "shimmer relative h-[78px] overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-white/5 dark:bg-ink-900/60"));
   }
 }
 
 function showEmpty(title, sub) {
   $("list").innerHTML = "";
+  $("podium").classList.add("hidden");
   const e = $("empty");
   e.innerHTML = "";
   e.classList.remove("hidden");
-  e.appendChild(el("p", "text-sm font-semibold text-zinc-300", title));
+  e.appendChild(el("p", "text-sm font-semibold text-zinc-700 dark:text-zinc-300", title));
   if (sub) e.appendChild(el("p", "mt-1 text-xs text-zinc-500", sub));
 }
 
-function renderList() {
-  const list = $("list");
-  const empty = $("empty");
-  empty.classList.add("hidden");
+function render() {
+  const listEl = $("list");
+  const podiumEl = $("podium");
+  $("empty").classList.add("hidden");
 
-  if (state.error) {
-    showEmpty("Couldn't load data", "The dashboard data isn't published yet, or the network failed. It refreshes automatically.");
-    $("count").textContent = "";
-    return;
-  }
-  if (!state.latest) {
-    skeleton();
-    return;
-  }
+  if (state.error) { showEmpty("Couldn't load data", "The dashboard data isn't published yet, or the network failed. It refreshes automatically."); $("count").textContent = ""; return; }
+  if (!state.latest) { podiumEl.classList.add("hidden"); skeleton(); return; }
 
   const rows = currentRows();
-  $("count").textContent = `${rows.length} number${rows.length === 1 ? "" : "s"}` +
-    (state.filter.replace(/\D/g, "") ? " · filtered" : "");
+  const filtered = Boolean(state.filter.replace(/\D/g, ""));
+  $("count").textContent = `${rows.length} number${rows.length === 1 ? "" : "s"}` + (filtered ? " · filtered" : "");
 
-  if (rows.length === 0) {
-    showEmpty("No matches", state.filter ? "Try a different digit sequence." : "Nothing to show yet.");
-    return;
+  if (rows.length === 0) { showEmpty("No matches", filtered ? "Try a different digit sequence." : "Nothing to show yet."); return; }
+
+  // Podium for the top 3 when not filtering; the list holds the remainder.
+  const usePodium = !filtered && rows.length >= 3;
+  podiumEl.innerHTML = "";
+  if (usePodium) {
+    podiumEl.className = "mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end";
+    const frag = document.createDocumentFragment();
+    rows.slice(0, 3).forEach((r, i) => frag.appendChild(podiumCard(r, i)));
+    podiumEl.appendChild(frag);
+  } else {
+    podiumEl.classList.add("hidden");
   }
 
-  list.innerHTML = "";
+  const rest = usePodium ? rows.slice(3) : rows;
+  listEl.innerHTML = "";
   const frag = document.createDocumentFragment();
-  rows.forEach((r, i) => frag.appendChild(card(r, i)));
-  list.appendChild(frag);
+  rest.forEach((r, idx) => frag.appendChild(row(r, usePodium ? idx + 3 : idx)));
+  listEl.appendChild(frag);
 }
 
-/* ----------------------------- tabs / controls ----------------------------- */
+/* ----------------------------- controls ----------------------------- */
 
 function setView(v) {
   state.view = v;
   const now = v === "now";
-  const tabNow = $("tab-now"), tabEver = $("tab-ever");
-  tabNow.setAttribute("aria-selected", String(now));
-  tabEver.setAttribute("aria-selected", String(!now));
   const on = "bg-vf-red text-white shadow";
-  const off = "text-zinc-400";
-  tabNow.className = `rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${now ? on : off}`;
-  tabEver.className = `rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${now ? off : on}`;
-  renderList();
+  const off = "text-zinc-500 dark:text-zinc-400";
+  $("tab-now").setAttribute("aria-selected", String(now));
+  $("tab-ever").setAttribute("aria-selected", String(!now));
+  $("tab-now").className = `rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${now ? on : off}`;
+  $("tab-ever").className = `rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${now ? off : on}`;
+  render();
+}
+
+function toggleTheme() {
+  const dark = !document.documentElement.classList.contains("dark");
+  document.documentElement.classList.toggle("dark", dark);
+  try { localStorage.setItem("theme", dark ? "dark" : "light"); } catch {}
 }
 
 function wire() {
   $("tab-now").addEventListener("click", () => setView("now"));
   $("tab-ever").addEventListener("click", () => setView("ever"));
-  $("filter").addEventListener("input", (e) => { state.filter = e.target.value; renderList(); });
-  $("sort").addEventListener("change", (e) => { state.sort = e.target.value; renderList(); });
+  $("filter").addEventListener("input", (e) => { state.filter = e.target.value; render(); });
+  $("sort").addEventListener("change", (e) => { state.sort = e.target.value; render(); });
+  $("theme").addEventListener("click", toggleTheme);
   setView("now");
   skeleton();
   load();

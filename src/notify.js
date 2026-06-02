@@ -1,6 +1,9 @@
-const ISSUE_TITLE = "🔔 Premium numbers tracker";
-
 const api = "https://api.github.com";
+
+/** Tier marker by grade: gold star for the very best, bell otherwise. */
+function tierMark(grade) {
+  return grade >= 95 ? "⭐" : "🔔";
+}
 
 function headers(token) {
   return {
@@ -15,16 +18,26 @@ function formatMsisdn(m) {
   return `${m.slice(0, 4)} ${m.slice(4, 7)} ${m.slice(7)}`;
 }
 
+/** Highest grade among the alerted numbers (drives the tier marker). */
+export function topGrade(newPremium) {
+  return newPremium.reduce((m, n) => Math.max(m, n.grade ?? 0), 0);
+}
+
+/** Tiered issue title: star when a >=95 number is present, bell otherwise. */
+export function issueTitle(newPremium) {
+  return `${tierMark(topGrade(newPremium))} Premium numbers tracker`;
+}
+
 /** Build the markdown body for the alert issue. */
 export function buildIssueBody({ newPremium, generatedAt, repo }) {
   const lines = [
     `**${newPremium.length} new premium number(s)** detected at ${generatedAt}.`,
     "",
-    "| # | Number | Grade | Why |",
-    "|---|--------|-------|-----|",
+    "| | # | Number | Grade | Why |",
+    "|---|---|--------|-------|-----|",
   ];
   newPremium.forEach((n, i) => {
-    lines.push(`| ${i + 1} | \`${formatMsisdn(n.msisdn)}\` | ${n.grade} | ${n.reason || (n.tags || []).join(", ")} |`);
+    lines.push(`| ${tierMark(n.grade)} | ${i + 1} | \`${formatMsisdn(n.msisdn)}\` | ${n.grade} | ${n.reason || (n.tags || []).join(", ")} |`);
   });
   if (repo) {
     lines.push("", `Dashboard: https://${repo.split("/")[0]}.github.io/${repo.split("/")[1]}/`);
@@ -69,7 +82,7 @@ export async function notify(newPremium, opts = {}) {
     const res = await doFetch(`${api}/repos/${repo}/issues`, {
       method: "POST",
       headers: headers(token),
-      body: JSON.stringify({ title: ISSUE_TITLE, body, labels: ["premium-alert"] }),
+      body: JSON.stringify({ title: issueTitle(newPremium), body, labels: ["premium-alert"] }),
     });
     if (!res.ok) return `create-failed-${res.status}`;
     const created = await res.json();

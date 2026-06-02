@@ -1,5 +1,7 @@
 # VF Premium Numbers Alert
 
+**▶ Live demo: https://ahmadibrahiim.github.io/vf-premium-numbers-alert/**
+
 Monitors Vodafone Egypt's public "Red" eSIM phone-number catalog on a schedule,
 scores every number for how **premium** its digit pattern is, surfaces the best 30
 currently-available numbers (refined by an LLM), tracks new arrivals and how long
@@ -51,6 +53,17 @@ Set as workflow `env:` or repo variables (all optional):
 | `ALERT_THRESHOLD` | `90` | Min grade for a NEW number to open an Issue |
 | `CANDIDATE_COUNT` | `80` | How many top-scored numbers the LLM ranks |
 | `BEST_COUNT` | `30` | How many to surface |
+
+## Dashboard CSS
+
+The dashboard uses a **precompiled** Tailwind stylesheet (`web/tailwind.css`, committed) —
+no runtime CDN. Rebuild it after changing classes in `web/index.html` or `web/app.js`:
+
+```bash
+# one-off: grab the standalone CLI (no npm needed)
+curl -sL -o /tmp/tw https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-macos-arm64 && chmod +x /tmp/tw
+/tmp/tw -c tailwind.config.js -i web/input.css -o web/tailwind.css --minify
+```
 
 ## Local development
 

@@ -247,8 +247,11 @@ export function scoreMsisdn(msisdn) {
   }
 
   // --- palindrome of the 8 digits (e.g. 12344321) ---
+  // Mirror is a recognized but MID-tier category in the EG market: a palindrome
+  // with several distinct digits is not "premium" on its own. It only climbs when
+  // paired with heavy repetition or zeros, which other rules above already reward.
   if (isPalindrome(sub)) {
-    score += 40;
+    score += 28;
     tags.push("palindrome");
   }
 
@@ -301,7 +304,7 @@ export function scoreMsisdn(msisdn) {
     score += 22;
     tags.push("two-distinct-digits");
   } else if (distinct === 3) {
-    score += 12;
+    score += 8;
     tags.push("three-distinct-digits");
   } else if (distinct === 4) {
     score += 4;

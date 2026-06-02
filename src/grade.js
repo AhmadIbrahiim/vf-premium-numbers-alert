@@ -48,19 +48,24 @@ export async function gradeCandidates(candidates, opts = {}) {
   const fetchFn = fetchImpl || globalThis.fetch;
 
   const system =
-    "You grade Egyptian mobile numbers (01X followed by 8 digits) on how PREMIUM and " +
-    "EASY TO REMEMBER the pattern is. The 010/011/012/015 operator prefix is not special; " +
-    "judge the rhythm of the whole number, weighting the last 8 digits. A number is premium " +
-    "when a stranger could memorize or dictate it after hearing it once.\n" +
-    "Reward, in roughly this order: all-same digits; long runs/ladders including ANY constant " +
-    "step (02 04 06 08, 13579, 0102030405); repeating blocks (010 010 010, 4545 4545); " +
-    "grouped pairs/triples (00 11 22, 444 555); palindromes; heavy zeros / round endings " +
-    "(...100000). Penalize random-looking numbers.\n" +
-    "Grade rubric (be calibrated, use the full range):\n" +
-    "- 95-100: near-perfect, instantly memorable (all-same, full ladder, clean block repeat, mostly zeros)\n" +
-    "- 85-94: one strong clear pattern (palindrome, repeating pair/triple, partial ladder)\n" +
-    "- 70-84: a noticeable but partial pattern\n" +
-    "- below 70: ordinary\n" +
+    "You grade Egyptian mobile numbers (01X + 8 digits) for the EGYPTIAN VIP/special-number " +
+    "MARKET. The 010/011/012/015 prefix is not special; judge the last 8 digits. Value is driven " +
+    "FIRST by repetition density and zeros, the way Egyptian dealers price numbers. Be STRICT and " +
+    "calibrated: most numbers are ordinary and should score low. Reserve high grades for genuinely " +
+    "rare patterns.\n" +
+    "Market tiers (anchor to these):\n" +
+    "- 95-100 (VIP, very rare): 6+ same digit in a row (hexa/penta), 5+ trailing zeros or round forms " +
+    "(...000000, 0100000), a full 8-digit sequential run (12345678), or famous formats like 0101010 / 0100100.\n" +
+    "- 85-94 (premium): tetra (4 same in a row), a clean whole-number repeating block (ABABABAB, ABCABCAB, " +
+    "01000100), 4 trailing zeros, or a long partial sequential run.\n" +
+    "- 70-84 (good): a clear triple repeat, AABB doubling (55667788), pair ladders (01 02 03 04), " +
+    "3 trailing zeros, or a short clean sequential run.\n" +
+    "- 55-69 (mild): a MIRROR/palindrome that has 3+ distinct digits, only 2-3 distinct digits with no run, " +
+    "scattered zeros, or a weak partial pattern.\n" +
+    "- below 55: ordinary / random-looking.\n" +
+    "IMPORTANT: a plain mirror/palindrome (e.g. 44688644) is MID-TIER (~60-72), NOT premium. A mirror only " +
+    "earns 85+ when it ALSO has heavy repetition or zeros. Do not over-reward mirrors or 'three distinct " +
+    "digits'. Memorability matters, but repetition and zeros matter more.\n" +
     "From the supplied list, pick and rank the best " +
     count +
     " numbers, most desirable first. " +
