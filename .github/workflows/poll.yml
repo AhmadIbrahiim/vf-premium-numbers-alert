@@ -1,0 +1,71 @@
+name: poll-vf-numbers
+
+on:
+  schedule:
+    # Best-effort every 10 minutes (GitHub may delay/skip under load).
+    - cron: "*/10 * * * *"
+  push:
+    branches: [main]
+    paths: ["web/**", "src/**", ".github/workflows/poll.yml"]
+  workflow_dispatch: {}
+
+# Never let two runs race the gh-pages push.
+concurrency:
+  group: poll
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+  models: read
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Prepare gh-pages working copy (public/)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages --depth=1
+            git worktree add public origin/gh-pages
+          else
+            git worktree add --detach public
+            git -C public checkout --orphan gh-pages
+            git -C public reset --hard
+            git -C public clean -fdx
+          fi
+
+      - name: Run pipeline
+        id: run
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DATA_DIR: public
+          MODEL: openai/gpt-4o-mini
+        run: node src/run.js
+
+      - name: Copy dashboard into public/
+        run: |
+          cp web/index.html web/app.js web/styles.css public/
+          touch public/.nojekyll
+
+      - name: Commit & push to gh-pages
+        if: steps.run.outputs.changed == 'true' || github.event_name != 'schedule'
+        run: |
+          cd public
+          git add -A
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+          else
+            git commit -m "data: update $(date -u +%FT%TZ) [skip ci]"
+            git push origin HEAD:gh-pages
+          fi

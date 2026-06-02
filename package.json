@@ -1,0 +1,14 @@
+{
+  "name": "vf-premium-numbers-alert",
+  "version": "0.1.0",
+  "description": "Monitor Vodafone Egypt Red eSIM numbers, grade premium digit patterns, alert on new arrivals.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/run.js",
+    "test": "node --test"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Live dashboard of premium Vodafone Egypt mobile numbers — ranked by pattern score and AI grade." />
+  <meta name="color-scheme" content="dark" />
+  <title>VF Premium Numbers</title>
+
+  <!-- All styling is local — no external CDN requests -->
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+
+  <!-- ============================================================
+       HEADER
+       ============================================================ -->
+  <header class="site-header" role="banner">
+    <div class="header-inner">
+
+      <!-- Brand -->
+      <div class="header-brand">
+        <div class="brand-icon" aria-hidden="true">VF</div>
+        <div>
+          <div class="brand-title">VF Premium Numbers</div>
+          <div class="brand-subtitle">Vodafone Egypt · Pattern Monitor</div>
+        </div>
+      </div>
+
+      <!-- Last updated -->
+      <div class="last-updated" id="last-updated" aria-live="polite" aria-label="Data last updated">
+        updated <span>—</span>
+      </div>
+
+      <!-- Stat chips -->
+      <nav class="header-stats" aria-label="Summary statistics">
+        <div class="stat-chip" title="Total premium numbers in catalog">
+          <span aria-hidden="true">📋</span>
+          <span class="chip-label">Total</span>
+          <strong class="chip-value" id="stat-total" aria-label="Total numbers">—</strong>
+        </div>
+        <div class="stat-chip chip-new" title="New numbers found this run">
+          <span aria-hidden="true">✦</span>
+          <span class="chip-label">New</span>
+          <strong class="chip-value" id="stat-new" aria-label="New this run">—</strong>
+        </div>
+        <div class="stat-chip chip-gone" title="Numbers that disappeared this run">
+          <span aria-hidden="true">↓</span>
+          <span class="chip-label">Gone</span>
+          <strong class="chip-value" id="stat-gone" aria-label="Disappeared this run">—</strong>
+        </div>
+      </nav>
+
+    </div>
+  </header>
+
+  <!-- ============================================================
+       MAIN CONTENT
+       ============================================================ -->
+  <main id="main-content" role="main">
+
+    <!-- Controls: view toggle, filter, sort -->
+    <section class="controls" aria-label="View controls">
+
+      <!-- Tab toggle: best-now vs best-ever -->
+      <div class="tab-group" role="tablist" aria-label="Number view">
+        <button
+          class="tab-btn"
+          role="tab"
+          data-view="best-now"
+          aria-selected="true"
+          aria-controls="list-container"
+          id="tab-best-now"
+        >Best available now</button>
+        <button
+          class="tab-btn"
+          role="tab"
+          data-view="best-ever"
+          aria-selected="false"
+          aria-controls="list-container"
+          id="tab-best-ever"
+        >Best ever seen</button>
+      </div>
+
+      <!-- Digit filter -->
+      <div class="filter-wrap">
+        <span class="filter-icon" aria-hidden="true">⌕</span>
+        <input
+          id="filter-input"
+          class="filter-input"
+          type="search"
+          inputmode="numeric"
+          placeholder="Filter by digits…"
+          aria-label="Filter numbers by digit pattern"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <!-- Sort control -->
+      <select
+        id="sort-select"
+        class="sort-select"
+        aria-label="Sort numbers by"
+      >
+        <option value="grade">Sort: Grade</option>
+        <option value="score">Sort: Score</option>
+        <option value="newest">Sort: Newest first</option>
+      </select>
+
+    </section>
+
+    <!-- Results count -->
+    <p class="results-count" id="results-count" aria-live="polite" aria-atomic="true"></p>
+
+    <!-- List / cards area — replaced by JS -->
+    <div
+      id="list-container"
+      role="region"
+      aria-label="Premium numbers list"
+      aria-live="polite"
+    >
+      <!-- Content injected by app.js -->
+    </div>
+
+  </main>
+
+  <!-- ============================================================
+       FOOTER
+       ============================================================ -->
+  <footer class="site-footer" role="contentinfo">
+    <p>
+      Data scraped from <strong>Vodafone Egypt</strong>'s public catalog.
+      Cadence is best-effort (~10–20 min).
+      Numbers ranked by AI-assisted pattern analysis. Price is flat 350 EGP.
+    </p>
+  </footer>
+
+  <!-- App script — loaded after DOM is ready -->
+  <script src="./app.js"></script>
+
+</body>
+</html>
