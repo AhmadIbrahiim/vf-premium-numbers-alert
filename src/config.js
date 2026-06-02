@@ -31,7 +31,7 @@ export const CANDIDATE_COUNT = Number(process.env.CANDIDATE_COUNT || 80);
 export const BEST_COUNT = Number(process.env.BEST_COUNT || 30);
 
 /** A NEW number must grade >= this to trigger an alert Issue. */
-export const ALERT_THRESHOLD = Number(process.env.ALERT_THRESHOLD || 85);
+export const ALERT_THRESHOLD = Number(process.env.ALERT_THRESHOLD || 90);
 
 /** GitHub repo "owner/name", provided by Actions as GITHUB_REPOSITORY. */
 export const REPO = process.env.GITHUB_REPOSITORY || "";

@@ -98,6 +98,79 @@ function isRepeatingBlock(s) {
 }
 
 /**
+ * Longest run with a CONSTANT step (arithmetic ladder), e.g. 2,4,6,8 (step 2)
+ * or 9,7,5,3 (step -2). Returns the longest run and its step. Steps of 0
+ * (all-same) and ±1 (plain asc/desc) are handled elsewhere; callers filter.
+ * @returns {{len:number, step:number}}
+ */
+function longestArithRun(d) {
+  let bestLen = 1;
+  let bestStep = 0;
+  for (let i = 1; i < d.length; i++) {
+    const step = d[i] - d[i - 1];
+    let len = 2;
+    let j = i + 1;
+    while (j < d.length && d[j] - d[j - 1] === step) {
+      len += 1;
+      j += 1;
+    }
+    if (len > bestLen) {
+      bestLen = len;
+      bestStep = step;
+    }
+    i = j - 1;
+  }
+  return { len: bestLen, step: bestStep };
+}
+
+/**
+ * Treat the 8 digits as four two-digit groups (e.g. 01 02 03 04) and report
+ * how many leading groups form an arithmetic sequence with a non-zero step.
+ * @returns {{count:number, step:number}}  count in 1..4
+ */
+function pairLadder(d) {
+  const pairs = [
+    d[0] * 10 + d[1],
+    d[2] * 10 + d[3],
+    d[4] * 10 + d[5],
+    d[6] * 10 + d[7],
+  ];
+  const step = pairs[1] - pairs[0];
+  if (step === 0) return { count: 1, step: 0 };
+  let count = 2;
+  for (let i = 2; i < 4; i++) {
+    if (pairs[i] - pairs[i - 1] === step) count += 1;
+    else break;
+  }
+  return { count, step };
+}
+
+/**
+ * Run-length groups of the digit string, e.g. "00112233" -> [2,2,2,2].
+ * @returns {number[]} the length of each consecutive same-digit group
+ */
+function runLengths(d) {
+  const out = [];
+  let cur = 1;
+  for (let i = 1; i < d.length; i++) {
+    if (d[i] === d[i - 1]) cur += 1;
+    else {
+      out.push(cur);
+      cur = 1;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+/** Count of a given digit anywhere in the string. */
+function countDigit(d, target) {
+  let n = 0;
+  for (const x of d) if (x === target) n += 1;
+  return n;
+}
+
+/**
  * Pure. Score how premium a number's digit pattern is.
  * @param {string} msisdn 11-digit Egyptian mobile, e.g. "01055455833"
  * @returns {{score:number, tags:string[]}} score in [0,100], plus matched-pattern tags
@@ -253,6 +326,55 @@ export function scoreMsisdn(msisdn) {
   ) {
     score += 6;
     tags.push("ladder");
+  }
+
+  // --- arithmetic ladders with ANY constant step >= 2 (e.g. 2468, 13579, 9753) ---
+  // (steps of 0 = all-same and +/-1 = asc/desc are scored above; skip those here.)
+  const arith = longestArithRun(digits);
+  if (Math.abs(arith.step) >= 2) {
+    if (arith.len === 8) {
+      score += 80;
+      tags.push(`ladder-step${arith.step}`);
+    } else if (arith.len >= 5) {
+      score += 50;
+      tags.push(`ladder-step${arith.step}-x${arith.len}`);
+    } else if (arith.len === 4) {
+      score += 30;
+      tags.push(`ladder-step${arith.step}-x4`);
+    } else if (arith.len === 3) {
+      score += 10;
+      tags.push(`ladder-step${arith.step}-x3`);
+    }
+  }
+
+  // --- pair ladders: groups like 01 02 03 04 or 10 20 30 40 ---
+  const pl = pairLadder(digits);
+  if (pl.count === 4) {
+    score += 55;
+    tags.push("pair-ladder");
+  } else if (pl.count === 3) {
+    score += 25;
+    tags.push("pair-ladder-partial");
+  }
+
+  // --- grouped pairs/triples: every group repeats (00 11 22 33, 444 555 ..) ---
+  const groups = runLengths(digits);
+  const cleanlyGrouped =
+    groups.length >= 2 && groups.length <= 4 && groups.every((g) => g >= 2);
+  if (cleanlyGrouped) {
+    // 'aabb' (all groups == 2) already added 52; give the rest a real boost.
+    score += aabb ? 8 : 24;
+    if (!tags.includes("paired-AABB")) tags.push("grouped");
+  }
+
+  // --- lots of zeros anywhere (easy to dictate), beyond trailing zeros ---
+  const zeros = countDigit(digits, 0);
+  if (zeros >= 6) {
+    score += 24;
+    tags.push("mostly-zeros");
+  } else if (zeros >= 5 && tz < 5) {
+    score += 14;
+    tags.push("many-zeros");
   }
 
   // Normalize / cap.

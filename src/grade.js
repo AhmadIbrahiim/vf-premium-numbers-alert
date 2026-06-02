@@ -48,14 +48,24 @@ export async function gradeCandidates(candidates, opts = {}) {
   const fetchFn = fetchImpl || globalThis.fetch;
 
   const system =
-    "You are an expert at grading premium Egyptian mobile numbers (MSISDNs). " +
+    "You grade Egyptian mobile numbers (01X followed by 8 digits) on how PREMIUM and " +
+    "EASY TO REMEMBER the pattern is. The 010/011/012/015 operator prefix is not special; " +
+    "judge the rhythm of the whole number, weighting the last 8 digits. A number is premium " +
+    "when a stranger could memorize or dictate it after hearing it once.\n" +
+    "Reward, in roughly this order: all-same digits; long runs/ladders including ANY constant " +
+    "step (02 04 06 08, 13579, 0102030405); repeating blocks (010 010 010, 4545 4545); " +
+    "grouped pairs/triples (00 11 22, 444 555); palindromes; heavy zeros / round endings " +
+    "(...100000). Penalize random-looking numbers.\n" +
+    "Grade rubric (be calibrated, use the full range):\n" +
+    "- 95-100: near-perfect, instantly memorable (all-same, full ladder, clean block repeat, mostly zeros)\n" +
+    "- 85-94: one strong clear pattern (palindrome, repeating pair/triple, partial ladder)\n" +
+    "- 70-84: a noticeable but partial pattern\n" +
+    "- below 70: ordinary\n" +
     "From the supplied list, pick and rank the best " +
     count +
     " numbers, most desirable first. " +
-    "Grade reflects how desirable/premium the digit pattern is (repeats, sequences, " +
-    "palindromes, round endings, memorability). " +
     'Return STRICT JSON only: {"ranked":[{"msisdn":"...","grade":<0-100 int>,"reason":"<short why>"}, ...]}. ' +
-    "Only use msisdns from the supplied list.";
+    "Use only msisdns from the supplied list.";
 
   const user =
     "Candidates (compact JSON, already pattern-ranked best-first):\n" +
