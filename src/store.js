@@ -86,6 +86,8 @@ export function buildLatest({ total, bestThirty, history, diff, today, generated
     total,
     new_count: diff.newMsisdns.length,
     disappeared_count: diff.disappearedMsisdns.length,
+    new_msisdns: diff.newMsisdns,
+    disappeared_msisdns: diff.disappearedMsisdns,
     best_thirty,
   };
 }
