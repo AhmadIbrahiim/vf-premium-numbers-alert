@@ -3,6 +3,8 @@
   "total": 1654,
   "new_count": 3,
   "disappeared_count": 5,
+  "new_msisdns": ["01111111111", "01122334455", "01055555555"],
+  "disappeared_msisdns": ["01070000001", "01082222333", "01190000009", "01234567000", "01011222000"],
   "best_thirty": [
     { "msisdn": "01000000001", "score": 99, "grade": 98, "reason": "Nine zeros with trailing 1 — near-perfect sequence", "is_new": false, "first_seen": "2026-05-10", "age_days": 24, "tags": ["near-repdigit", "low-entropy"] },
     { "msisdn": "01111111111", "score": 99, "grade": 97, "reason": "All ones — maximum repdigit", "is_new": true, "first_seen": "2026-06-01", "age_days": 2, "tags": ["all-same", "repdigit"] },

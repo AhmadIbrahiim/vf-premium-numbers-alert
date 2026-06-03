@@ -10,7 +10,7 @@
 const state = {
   latest: null,
   history: null,
-  view: "now", // "now" | "ever"
+  view: "now", // "now" | "ever" | "changes"
   filter: "",
   sort: "grade",
   error: false,
@@ -153,6 +153,7 @@ function bestEver() {
 }
 
 function currentRows() {
+  if (state.view === "changes") return [];
   let rows = state.view === "now" ? (state.latest?.best_thirty || []).slice() : bestEver();
   const f = state.filter.replace(/\D/g, "");
   if (f) rows = rows.filter((r) => r.msisdn.replace(/\D/g, "").includes(f));
@@ -163,6 +164,28 @@ function currentRows() {
     return (b.grade || 0) - (a.grade || 0);
   });
   return rows;
+}
+
+function changesRows(type) {
+  const list = type === "new" ? (state.latest?.new_msisdns || []) : (state.latest?.disappeared_msisdns || []);
+  return list
+    .map((msisdn) => {
+      const h = state.history?.[msisdn] || {};
+      const fromBest = (state.latest?.best_thirty || []).find((x) => x.msisdn === msisdn);
+      const grade = fromBest?.grade ?? h.best_grade ?? h.score ?? 0;
+      return {
+        msisdn,
+        grade,
+        score: fromBest?.score ?? h.score ?? 0,
+        reason: fromBest?.reason || (type === "new" ? "newly added this run" : "no longer available this run"),
+        tags: fromBest?.tags || h.tags || [],
+        is_new: type === "new",
+        status: type === "gone" ? "gone" : "available",
+        age_days: fromBest?.age_days ?? 0,
+      };
+    })
+    .filter((r) => r.msisdn)
+    .sort((a, b) => (b.grade || 0) - (a.grade || 0));
 }
 
 /* ----------------------------- render ----------------------------- */
@@ -264,6 +287,41 @@ function showEmpty(title, sub) {
   if (sub) e.appendChild(el("p", "mt-1 text-xs text-zinc-500", sub));
 }
 
+function renderChanges() {
+  const listEl = $("list");
+  const podiumEl = $("podium");
+  podiumEl.classList.add("hidden");
+  $("empty").classList.add("hidden");
+  listEl.innerHTML = "";
+
+  const filterDigits = state.filter.replace(/\D/g, "");
+  const applyFilter = (rows) => (!filterDigits ? rows : rows.filter((r) => r.msisdn.replace(/\D/g, "").includes(filterDigits)));
+  const newRows = applyFilter(changesRows("new"));
+  const goneRows = applyFilter(changesRows("gone"));
+  const total = newRows.length + goneRows.length;
+
+  $("count").textContent = `${total} change${total === 1 ? "" : "s"}` + (filterDigits ? " · filtered" : "");
+  if (!total) {
+    showEmpty("No changes in this snapshot", filterDigits ? "Try a different digit sequence." : "No newly added or gone numbers were detected.");
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  const section = (title, rows) => {
+    const wrap = el("section", "space-y-2");
+    wrap.appendChild(el("h2", "text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400", `${title} (${rows.length})`));
+    if (!rows.length) {
+      wrap.appendChild(el("p", "rounded-xl border border-dashed border-zinc-300 bg-white/60 px-4 py-3 text-sm text-zinc-500 dark:border-white/10 dark:bg-ink-900/50 dark:text-zinc-400", "None"));
+      return wrap;
+    }
+    rows.forEach((r, i) => wrap.appendChild(row(r, i)));
+    return wrap;
+  };
+  frag.appendChild(section("Newly added", newRows));
+  frag.appendChild(section("Gone", goneRows));
+  listEl.appendChild(frag);
+}
+
 function render() {
   const listEl = $("list");
   const podiumEl = $("podium");
@@ -271,6 +329,7 @@ function render() {
 
   if (state.error) { showEmpty("Couldn't load data", "The dashboard data isn't published yet, or the network failed. It refreshes automatically."); $("count").textContent = ""; return; }
   if (!state.latest) { podiumEl.classList.add("hidden"); skeleton(); return; }
+  if (state.view === "changes") { renderChanges(); return; }
 
   const rows = currentRows();
   const filtered = Boolean(state.filter.replace(/\D/g, ""));
@@ -302,12 +361,16 @@ function render() {
 function setView(v) {
   state.view = v;
   const now = v === "now";
+  const ever = v === "ever";
+  const changes = v === "changes";
   const on = "bg-vf-red text-white shadow";
   const off = "text-zinc-500 dark:text-zinc-400";
   $("tab-now").setAttribute("aria-selected", String(now));
-  $("tab-ever").setAttribute("aria-selected", String(!now));
+  $("tab-ever").setAttribute("aria-selected", String(ever));
+  $("tab-changes").setAttribute("aria-selected", String(changes));
   $("tab-now").className = `rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${now ? on : off}`;
-  $("tab-ever").className = `rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${now ? off : on}`;
+  $("tab-ever").className = `rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${ever ? on : off}`;
+  $("tab-changes").className = `rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${changes ? on : off}`;
   render();
 }
 
@@ -320,6 +383,7 @@ function toggleTheme() {
 function wire() {
   $("tab-now").addEventListener("click", () => setView("now"));
   $("tab-ever").addEventListener("click", () => setView("ever"));
+  $("tab-changes").addEventListener("click", () => setView("changes"));
   $("filter").addEventListener("input", (e) => { state.filter = e.target.value; render(); });
   $("sort").addEventListener("change", (e) => { state.sort = e.target.value; render(); });
   $("theme").addEventListener("click", toggleTheme);
