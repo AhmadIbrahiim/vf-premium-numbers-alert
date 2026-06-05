@@ -67,7 +67,7 @@ export function updateHistory({ history, available, scoreMap, gradeMap, today })
  * Build the dashboard-facing latest.json payload.
  * @returns {object}
  */
-export function buildLatest({ total, bestThirty, history, diff, today, generatedAt }) {
+export function buildLatest({ total, bestThirty, history, diff, today, generatedAt, available = [], scoreMap = new Map() }) {
   const best_thirty = bestThirty.map((c) => {
     const h = history[c.msisdn] || {};
     return {
@@ -81,6 +81,25 @@ export function buildLatest({ total, bestThirty, history, diff, today, generated
       age_days: dayDiff(h.first_seen || today, today),
     };
   });
+
+  // All available numbers not already in best_thirty, sorted by heuristic score.
+  const gradedSet = new Set(best_thirty.map((c) => c.msisdn));
+  const all_available = available
+    .filter((msisdn) => !gradedSet.has(msisdn))
+    .map((msisdn) => {
+      const s = scoreMap.get(msisdn) || { score: 0, tags: [] };
+      const h = history[msisdn] || {};
+      return {
+        msisdn,
+        score: s.score,
+        tags: s.tags,
+        is_new: diff.newSet.has(msisdn),
+        first_seen: h.first_seen || today,
+        age_days: dayDiff(h.first_seen || today, today),
+      };
+    })
+    .sort((a, b) => b.score - a.score);
+
   return {
     generated_at: generatedAt,
     total,
@@ -89,6 +108,7 @@ export function buildLatest({ total, bestThirty, history, diff, today, generated
     new_msisdns: diff.newMsisdns,
     disappeared_msisdns: diff.disappearedMsisdns,
     best_thirty,
+    all_available,
   };
 }
 

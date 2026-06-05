@@ -10,6 +10,7 @@
 const state = {
   latest: null,
   history: null,
+  events: null, // accumulated change events from events.jsonl.json
   view: "now", // "now" | "ever" | "changes"
   filter: "",
   sort: "grade",
@@ -120,12 +121,14 @@ function tagPills(row, max) {
 
 async function load() {
   try {
-    const [l, h] = await Promise.all([
+    const [l, h, ev] = await Promise.all([
       fetch("./latest.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
       fetch("./history.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : {})),
+      fetch("./events.jsonl.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : [])),
     ]);
     state.latest = l;
     state.history = h && typeof h === "object" ? h : {};
+    state.events = Array.isArray(ev) ? ev : [];
     state.error = false;
   } catch {
     state.error = true;
@@ -148,13 +151,24 @@ function bestEver() {
       age_days: 0,
       status: e.status || "available",
     }))
-    .sort((a, b) => b.grade - a.grade)
-    .slice(0, 30);
+    .sort((a, b) => b.grade - a.grade);
+}
+
+/** Merge LLM-graded best_thirty with the remaining available numbers (heuristic score only). */
+function nowRows() {
+  const best = (state.latest?.best_thirty || []).slice();
+  const all = state.latest?.all_available;
+  if (!all || !all.length) return best;
+  const gradedSet = new Set(best.map((x) => x.msisdn));
+  const rest = all
+    .filter((a) => !gradedSet.has(a.msisdn))
+    .map((a) => ({ ...a, grade: a.score, reason: "" }));
+  return [...best, ...rest];
 }
 
 function currentRows() {
   if (state.view === "changes") return [];
-  let rows = state.view === "now" ? (state.latest?.best_thirty || []).slice() : bestEver();
+  let rows = state.view === "now" ? nowRows() : bestEver();
   const f = state.filter.replace(/\D/g, "");
   if (f) rows = rows.filter((r) => r.msisdn.replace(/\D/g, "").includes(f));
   const by = state.sort;
@@ -166,24 +180,48 @@ function currentRows() {
   return rows;
 }
 
+/**
+ * Build a change row from an msisdn + type (for the timeline view).
+ * Falls back through best_thirty → history for grade/tags.
+ */
+function buildChangeRow(msisdn, type) {
+  const h = state.history?.[msisdn] || {};
+  const fromBest = (state.latest?.best_thirty || []).find((x) => x.msisdn === msisdn);
+  const grade = fromBest?.grade ?? h.best_grade ?? h.score ?? 0;
+  return {
+    msisdn,
+    grade,
+    score: fromBest?.score ?? h.score ?? 0,
+    reason: fromBest?.reason || (type === "new" ? "newly added" : "no longer available"),
+    tags: fromBest?.tags || h.tags || [],
+    is_new: type === "new",
+    status: type === "gone" ? "gone" : "available",
+    age_days: fromBest?.age_days ?? 0,
+  };
+}
+
+/**
+ * Group accumulated events (from events.jsonl.json) by run timestamp.
+ * Returns runs sorted most-recent-first, each with { ts, newMs[], goneMs[] }.
+ * Returns null when the events file hasn't loaded yet / is empty.
+ */
+function changesTimeline() {
+  const events = state.events;
+  if (!events || !events.length) return null;
+  const runs = new Map();
+  for (const e of events) {
+    if (!runs.has(e.ts)) runs.set(e.ts, { ts: e.ts, newMs: [], goneMs: [] });
+    const r = runs.get(e.ts);
+    if (e.type === "new") r.newMs.push(e.msisdn);
+    else r.goneMs.push(e.msisdn);
+  }
+  return [...runs.values()].sort((a, b) => b.ts.localeCompare(a.ts));
+}
+
 function changesRows(type) {
   const list = type === "new" ? (state.latest?.new_msisdns || []) : (state.latest?.disappeared_msisdns || []);
   return list
-    .map((msisdn) => {
-      const h = state.history?.[msisdn] || {};
-      const fromBest = (state.latest?.best_thirty || []).find((x) => x.msisdn === msisdn);
-      const grade = fromBest?.grade ?? h.best_grade ?? h.score ?? 0;
-      return {
-        msisdn,
-        grade,
-        score: fromBest?.score ?? h.score ?? 0,
-        reason: fromBest?.reason || (type === "new" ? "newly added this run" : "no longer available this run"),
-        tags: fromBest?.tags || h.tags || [],
-        is_new: type === "new",
-        status: type === "gone" ? "gone" : "available",
-        age_days: fromBest?.age_days ?? 0,
-      };
-    })
+    .map((msisdn) => buildChangeRow(msisdn, type))
     .filter((r) => r.msisdn)
     .sort((a, b) => (b.grade || 0) - (a.grade || 0));
 }
@@ -296,29 +334,78 @@ function renderChanges() {
 
   const filterDigits = state.filter.replace(/\D/g, "");
   const applyFilter = (rows) => (!filterDigits ? rows : rows.filter((r) => r.msisdn.replace(/\D/g, "").includes(filterDigits)));
-  const newRows = applyFilter(changesRows("new"));
-  const goneRows = applyFilter(changesRows("gone"));
-  const total = newRows.length + goneRows.length;
 
-  $("count").textContent = `${total} change${total === 1 ? "" : "s"}` + (filterDigits ? " · filtered" : "");
-  if (!total) {
-    showEmpty("No changes in this snapshot", filterDigits ? "Try a different digit sequence." : "No newly added or gone numbers were detected.");
+  const timeline = changesTimeline();
+
+  // No events file yet — fall back to the current snapshot diff.
+  if (!timeline) {
+    const newRows = applyFilter(changesRows("new"));
+    const goneRows = applyFilter(changesRows("gone"));
+    const total = newRows.length + goneRows.length;
+    $("count").textContent = `${total} change${total === 1 ? "" : "s"}` + (filterDigits ? " · filtered" : "");
+    if (!total) {
+      showEmpty("No changes in this snapshot", filterDigits ? "Try a different digit sequence." : "No newly added or gone numbers were detected.");
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    const makeSection = (title, rows) => {
+      const wrap = el("section", "space-y-2");
+      wrap.appendChild(el("h2", "text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400", `${title} (${rows.length})`));
+      if (!rows.length) {
+        wrap.appendChild(el("p", "rounded-xl border border-dashed border-zinc-300 bg-white/60 px-4 py-3 text-sm text-zinc-500 dark:border-white/10 dark:bg-ink-900/50 dark:text-zinc-400", "None"));
+        return wrap;
+      }
+      rows.forEach((r, i) => wrap.appendChild(row(r, i)));
+      return wrap;
+    };
+    frag.appendChild(makeSection("Newly added", newRows));
+    frag.appendChild(makeSection("Gone", goneRows));
+    listEl.appendChild(frag);
     return;
   }
 
+  // Timeline view: one section per run, most-recent first.
+  let totalRows = 0;
   const frag = document.createDocumentFragment();
-  const section = (title, rows) => {
-    const wrap = el("section", "space-y-2");
-    wrap.appendChild(el("h2", "text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400", `${title} (${rows.length})`));
-    if (!rows.length) {
-      wrap.appendChild(el("p", "rounded-xl border border-dashed border-zinc-300 bg-white/60 px-4 py-3 text-sm text-zinc-500 dark:border-white/10 dark:bg-ink-900/50 dark:text-zinc-400", "None"));
-      return wrap;
+
+  for (const run of timeline) {
+    const newRows = applyFilter(run.newMs.map((m) => buildChangeRow(m, "new")).sort((a, b) => b.grade - a.grade));
+    const goneRows = applyFilter(run.goneMs.map((m) => buildChangeRow(m, "gone")).sort((a, b) => b.grade - a.grade));
+    if (!newRows.length && !goneRows.length) continue;
+    totalRows += newRows.length + goneRows.length;
+
+    const runEl = el("div", "space-y-3 border-t border-zinc-100 pt-4 first:border-0 first:pt-0 dark:border-white/5");
+
+    // Run header with timestamp + count badges
+    const header = el("div", "flex flex-wrap items-center gap-2");
+    header.appendChild(el("span", "text-xs font-semibold text-zinc-400 dark:text-zinc-500", relTime(run.ts)));
+    if (newRows.length) header.appendChild(el("span", "rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-300", `+${newRows.length} new`));
+    if (goneRows.length) header.appendChild(el("span", "rounded-md bg-zinc-400/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500 ring-1 ring-zinc-400/30 dark:text-zinc-400", `-${goneRows.length} gone`));
+    runEl.appendChild(header);
+
+    if (newRows.length) {
+      const sec = el("section", "space-y-2");
+      sec.appendChild(el("h3", "text-xs font-medium uppercase tracking-wide text-emerald-600/70 dark:text-emerald-400/70", `Newly added (${newRows.length})`));
+      newRows.forEach((r, i) => sec.appendChild(row(r, i)));
+      runEl.appendChild(sec);
     }
-    rows.forEach((r, i) => wrap.appendChild(row(r, i)));
-    return wrap;
-  };
-  frag.appendChild(section("Newly added", newRows));
-  frag.appendChild(section("Gone", goneRows));
+    if (goneRows.length) {
+      const sec = el("section", "space-y-2");
+      sec.appendChild(el("h3", "text-xs font-medium uppercase tracking-wide text-zinc-400/70 dark:text-zinc-500/70", `Gone (${goneRows.length})`));
+      goneRows.forEach((r, i) => sec.appendChild(row(r, i)));
+      runEl.appendChild(sec);
+    }
+
+    frag.appendChild(runEl);
+  }
+
+  if (!totalRows) {
+    showEmpty("No changes recorded", filterDigits ? "Try a different digit sequence." : "No newly added or gone numbers have been detected yet.");
+    $("count").textContent = "";
+    return;
+  }
+
+  $("count").textContent = `${totalRows} number${totalRows === 1 ? "" : "s"} changed` + (filterDigits ? " · filtered" : "");
   listEl.appendChild(frag);
 }
 

@@ -48,24 +48,31 @@ export async function gradeCandidates(candidates, opts = {}) {
   const fetchFn = fetchImpl || globalThis.fetch;
 
   const system =
-    "You grade Egyptian mobile numbers (01X + 8 digits) for the EGYPTIAN VIP/special-number " +
-    "MARKET. The 010/011/012/015 prefix is not special; judge the last 8 digits. Value is driven " +
-    "FIRST by repetition density and zeros, the way Egyptian dealers price numbers. Be STRICT and " +
-    "calibrated: most numbers are ordinary and should score low. Reserve high grades for genuinely " +
-    "rare patterns.\n" +
-    "Market tiers (anchor to these):\n" +
-    "- 95-100 (VIP, very rare): 6+ same digit in a row (hexa/penta), 5+ trailing zeros or round forms " +
-    "(...000000, 0100000), a full 8-digit sequential run (12345678), or famous formats like 0101010 / 0100100.\n" +
-    "- 85-94 (premium): tetra (4 same in a row), a clean whole-number repeating block (ABABABAB, ABCABCAB, " +
-    "01000100), 4 trailing zeros, or a long partial sequential run.\n" +
-    "- 70-84 (good): a clear triple repeat, AABB doubling (55667788), pair ladders (01 02 03 04), " +
-    "3 trailing zeros, or a short clean sequential run.\n" +
-    "- 55-69 (mild): a MIRROR/palindrome that has 3+ distinct digits, only 2-3 distinct digits with no run, " +
-    "scattered zeros, or a weak partial pattern.\n" +
-    "- below 55: ordinary / random-looking.\n" +
-    "IMPORTANT: a plain mirror/palindrome (e.g. 44688644) is MID-TIER (~60-72), NOT premium. A mirror only " +
-    "earns 85+ when it ALSO has heavy repetition or zeros. Do not over-reward mirrors or 'three distinct " +
-    "digits'. Memorability matters, but repetition and zeros matter more.\n" +
+    "You are a specialist grader for the EGYPTIAN VIP phone number market. Dealers pay 500–50,000+ EGP " +
+    "for numbers with strong patterns. Judge the LAST 8 DIGITS only (the 010/011/012/015 prefix is commodity).\n\n" +
+    "WHAT DRIVES VALUE — in order of importance:\n" +
+    "1. REPETITION DENSITY: More of the same digit = more valuable. Six identical digits beats four.\n" +
+    "2. ZEROS: Zeros are highly prized (easy to dictate, looks impressive). Extra zeros always lift the grade.\n" +
+    "3. SEQUENTIAL RUNS: 12345678, 87654321, or partial runs of 5+ digits.\n" +
+    "4. EASY TO DICTATE: Can you describe it in ≤5 words? (\"five twos then six\", \"all nines\", \"one-two alternating\") → 75+.\n" +
+    "5. COMBINATION BONUS: Two or more patterns together always grade higher than either alone.\n\n" +
+    "GRADE ANCHORS:\n" +
+    "- 95-100 (VIP): All-same digit (44444444), full 8-digit sequential run (12345678/87654321), " +
+    "6+ same digits in a row (e.g. 12333333), 5+ trailing zeros (X0000000), ultra-clean round forms " +
+    "(01000000, 00100100, 01010101, 10000001).\n" +
+    "- 85-94 (Premium): 4-5 same digits in a row (e.g. 44445678), clean alternating block (12121212, 01010101-like), " +
+    "4 trailing zeros (XX000000), full 2/3-digit repeating block (ABABABAB, ABCABCAB), " +
+    "pair ladders (01020304, 10203040), two-pair AABB mirror with repetition (11221122).\n" +
+    "- 70-84 (Good): Triple same digit run, AABB double-pairs (11223344, 55667788), 3 trailing zeros, " +
+    "near-palindrome with strong repetition, arithmetic step-2 sequence (24681357), mostly-zero number.\n" +
+    "- 55-69 (Mild): Plain palindrome without heavy repetition, 2-digit alternating for half the number, " +
+    "two trailing zeros with another noticeable pattern, 2-3 distinct digits scattered.\n" +
+    "- Below 55: No discernible pattern; random-looking digits.\n\n" +
+    "KEY RULES:\n" +
+    "- A plain palindrome alone (e.g. 44688644) is mid-tier (58-68), NOT premium. It needs heavy repetition " +
+    "or zeros to reach 85+.\n" +
+    "- When patterns combine (e.g. palindrome + triple repeat + trailing zero), add 10-15 to what either alone would earn.\n" +
+    "- Prefer false-positive over false-negative: if unsure between two tiers, go higher.\n\n" +
     "From the supplied list, pick and rank the best " +
     count +
     " numbers, most desirable first. " +

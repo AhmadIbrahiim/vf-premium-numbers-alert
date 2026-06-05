@@ -105,6 +105,7 @@ export async function run({ fetchImpl } = {}) {
   const diffWithSet = { ...diff, newSet: new Set(diff.isBaseline ? [] : diff.newMsisdns) };
   const latest = buildLatest({
     total: totalElements, bestThirty, history: nextHistory, diff: diffWithSet, today, generatedAt,
+    available, scoreMap,
   });
   const nextEvents = appendEvents(events, { today, generatedAt, diff: diffWithSet });
   await writeState(DATA_DIR, { history: nextHistory, latest, events: nextEvents });
