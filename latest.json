@@ -1,28 +1,22 @@
 {
-  "generated_at": "2026-06-12T22:02:23.229Z",
-  "total": 1716,
-  "new_count": 1,
-  "disappeared_count": 9,
-  "new_msisdns": [
-    "01031121100"
-  ],
+  "generated_at": "2026-06-12T23:40:39.157Z",
+  "total": 1711,
+  "new_count": 0,
+  "disappeared_count": 5,
+  "new_msisdns": [],
   "disappeared_msisdns": [
-    "01044600606",
-    "01055800551",
-    "01044000899",
-    "01055999800",
-    "01055000944",
-    "01007057057",
-    "01044600088",
-    "01011801800",
-    "01011311300"
+    "01055455472",
+    "01055558273",
+    "01055524400",
+    "01003443442",
+    "01003300223"
   ],
   "best_thirty": [
     {
       "msisdn": "01044993300",
       "score": 72,
       "grade": 85,
-      "reason": "paired-AABB with ending-00",
+      "reason": "paired AABB with ending 00",
       "tags": [
         "paired-AABB",
         "ending-00"
@@ -35,7 +29,7 @@
       "msisdn": "01044551100",
       "score": 72,
       "grade": 85,
-      "reason": "paired-AABB with ending-00",
+      "reason": "paired AABB with ending 00",
       "tags": [
         "paired-AABB",
         "ending-00"
@@ -48,7 +42,7 @@
       "msisdn": "01044882200",
       "score": 72,
       "grade": 85,
-      "reason": "paired-AABB with ending-00",
+      "reason": "paired AABB with ending 00",
       "tags": [
         "paired-AABB",
         "ending-00"
@@ -61,7 +55,7 @@
       "msisdn": "01044887700",
       "score": 72,
       "grade": 85,
-      "reason": "paired-AABB with ending-00",
+      "reason": "paired AABB with ending 00",
       "tags": [
         "paired-AABB",
         "ending-00"
@@ -74,7 +68,7 @@
       "msisdn": "01044226600",
       "score": 72,
       "grade": 85,
-      "reason": "paired-AABB with ending-00",
+      "reason": "paired AABB with ending 00",
       "tags": [
         "paired-AABB",
         "ending-00"
@@ -87,7 +81,7 @@
       "msisdn": "01055440044",
       "score": 68,
       "grade": 80,
-      "reason": "paired-AABB with three distinct digits",
+      "reason": "paired AABB with three distinct digits",
       "tags": [
         "paired-AABB",
         "three-distinct-digits"
@@ -100,7 +94,7 @@
       "msisdn": "01055770044",
       "score": 64,
       "grade": 80,
-      "reason": "paired-AABB",
+      "reason": "paired AABB",
       "tags": [
         "paired-AABB"
       ],
@@ -112,7 +106,7 @@
       "msisdn": "01044009933",
       "score": 64,
       "grade": 80,
-      "reason": "paired-AABB",
+      "reason": "paired AABB",
       "tags": [
         "paired-AABB"
       ],
@@ -152,7 +146,7 @@
       "msisdn": "01044495445",
       "score": 45,
       "grade": 75,
-      "reason": "triple-digit with three distinct digits and pair ladder partial",
+      "reason": "triple digit with three distinct digits and pair ladder partial",
       "tags": [
         "triple-digit",
         "three-distinct-digits",
@@ -165,8 +159,8 @@
     {
       "msisdn": "01044220009",
       "score": 41,
-      "grade": 75,
-      "reason": "triple-digit with pair ladder partial",
+      "grade": 70,
+      "reason": "triple digit with pair ladder partial",
       "tags": [
         "triple-digit",
         "pair-ladder-partial"
@@ -178,8 +172,8 @@
     {
       "msisdn": "01044220007",
       "score": 41,
-      "grade": 75,
-      "reason": "triple-digit with pair ladder partial",
+      "grade": 70,
+      "reason": "triple digit with pair ladder partial",
       "tags": [
         "triple-digit",
         "pair-ladder-partial"
@@ -244,7 +238,7 @@
       "msisdn": "01026226200",
       "score": 34,
       "grade": 70,
-      "reason": "repeating block partial with ending-00 and three distinct digits",
+      "reason": "repeating block partial with ending 00 and three distinct digits",
       "tags": [
         "repeating-block-partial",
         "ending-00",
@@ -457,16 +451,6 @@
     },
     {
       "msisdn": "01055559831",
-      "score": 30,
-      "tags": [
-        "repeated-digit-x4"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-03",
-      "age_days": 10
-    },
-    {
-      "msisdn": "01055558273",
       "score": 30,
       "tags": [
         "repeated-digit-x4"
@@ -742,17 +726,6 @@
       "is_new": false,
       "first_seen": "2026-06-03",
       "age_days": 10
-    },
-    {
-      "msisdn": "01055524400",
-      "score": 24,
-      "tags": [
-        "triple-digit",
-        "ending-00"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-11",
-      "age_days": 2
     },
     {
       "msisdn": "01055584400",
@@ -1175,16 +1148,6 @@
     },
     {
       "msisdn": "01055655634",
-      "score": 22,
-      "tags": [
-        "repeating-block-partial"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-03",
-      "age_days": 10
-    },
-    {
-      "msisdn": "01055455472",
       "score": 22,
       "tags": [
         "repeating-block-partial"
@@ -5036,7 +4999,7 @@
       "tags": [
         "ending-00"
       ],
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-06-11",
       "age_days": 2
     },
@@ -5969,16 +5932,6 @@
       "is_new": false,
       "first_seen": "2026-06-03",
       "age_days": 10
-    },
-    {
-      "msisdn": "01003300223",
-      "score": 8,
-      "tags": [
-        "three-distinct-digits"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-11",
-      "age_days": 2
     },
     {
       "msisdn": "01044767447",
@@ -8402,14 +8355,6 @@
     },
     {
       "msisdn": "01044844009",
-      "score": 4,
-      "tags": [],
-      "is_new": false,
-      "first_seen": "2026-06-11",
-      "age_days": 2
-    },
-    {
-      "msisdn": "01003443442",
       "score": 4,
       "tags": [],
       "is_new": false,
