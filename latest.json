@@ -1,13 +1,15 @@
 {
-  "generated_at": "2026-06-18T23:25:15.454Z",
-  "total": 1644,
+  "generated_at": "2026-06-19T02:18:52.303Z",
+  "total": 1639,
   "new_count": 0,
-  "disappeared_count": 3,
+  "disappeared_count": 5,
   "new_msisdns": [],
   "disappeared_msisdns": [
-    "01008868663",
-    "01007716655",
-    "01011040440"
+    "01004119199",
+    "01055755003",
+    "01009911655",
+    "01044019444",
+    "01055554726"
   ],
   "best_thirty": [
     {
@@ -38,12 +40,38 @@
     {
       "msisdn": "01044495445",
       "score": 45,
-      "grade": 75,
+      "grade": 70,
       "reason": "triple-digit with three distinct digits and pair-ladder partial",
       "tags": [
         "triple-digit",
         "three-distinct-digits",
         "pair-ladder-partial"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-03",
+      "age_days": 16
+    },
+    {
+      "msisdn": "01055288255",
+      "score": 36,
+      "grade": 55,
+      "reason": "palindrome with three distinct digits",
+      "tags": [
+        "palindrome",
+        "three-distinct-digits"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-03",
+      "age_days": 16
+    },
+    {
+      "msisdn": "01055788755",
+      "score": 36,
+      "grade": 55,
+      "reason": "palindrome with three distinct digits",
+      "tags": [
+        "palindrome",
+        "three-distinct-digits"
       ],
       "is_new": false,
       "first_seen": "2026-06-03",
@@ -72,32 +100,6 @@
       "is_new": false,
       "first_seen": "2026-06-17",
       "age_days": 2
-    },
-    {
-      "msisdn": "01055288255",
-      "score": 36,
-      "grade": 68,
-      "reason": "palindrome with three distinct digits",
-      "tags": [
-        "palindrome",
-        "three-distinct-digits"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-03",
-      "age_days": 16
-    },
-    {
-      "msisdn": "01055788755",
-      "score": 36,
-      "grade": 68,
-      "reason": "palindrome with three distinct digits",
-      "tags": [
-        "palindrome",
-        "three-distinct-digits"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-03",
-      "age_days": 16
     },
     {
       "msisdn": "01023288886",
@@ -359,7 +361,7 @@
       "age_days": 16
     },
     {
-      "msisdn": "01055554726",
+      "msisdn": "01015988884",
       "score": 30,
       "grade": 70,
       "reason": "repeated digit x4",
@@ -371,7 +373,7 @@
       "age_days": 2
     },
     {
-      "msisdn": "01015988884",
+      "msisdn": "01055554736",
       "score": 30,
       "grade": 70,
       "reason": "repeated digit x4",
@@ -384,16 +386,6 @@
     }
   ],
   "all_available": [
-    {
-      "msisdn": "01055554736",
-      "score": 30,
-      "tags": [
-        "repeated-digit-x4"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-17",
-      "age_days": 2
-    },
     {
       "msisdn": "01055557683",
       "score": 30,
@@ -2282,16 +2274,6 @@
     },
     {
       "msisdn": "01055333667",
-      "score": 16,
-      "tags": [
-        "triple-digit"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-17",
-      "age_days": 2
-    },
-    {
-      "msisdn": "01044019444",
       "score": 16,
       "tags": [
         "triple-digit"
@@ -8143,14 +8125,6 @@
       "age_days": 2
     },
     {
-      "msisdn": "01004119199",
-      "score": 4,
-      "tags": [],
-      "is_new": false,
-      "first_seen": "2026-06-11",
-      "age_days": 8
-    },
-    {
       "msisdn": "01055345577",
       "score": 4,
       "tags": [],
@@ -8325,14 +8299,6 @@
       "is_new": false,
       "first_seen": "2026-06-03",
       "age_days": 16
-    },
-    {
-      "msisdn": "01055755003",
-      "score": 4,
-      "tags": [],
-      "is_new": false,
-      "first_seen": "2026-06-11",
-      "age_days": 8
     },
     {
       "msisdn": "01022699422",
@@ -14872,14 +14838,6 @@
     },
     {
       "msisdn": "01005574422",
-      "score": 0,
-      "tags": [],
-      "is_new": false,
-      "first_seen": "2026-06-11",
-      "age_days": 8
-    },
-    {
-      "msisdn": "01009911655",
       "score": 0,
       "tags": [],
       "is_new": false,
