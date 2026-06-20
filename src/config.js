@@ -57,3 +57,29 @@ export function dayDiff(fromYmd, toYmd) {
   if (Number.isNaN(a) || Number.isNaN(b)) return 0;
   return Math.max(0, Math.round((b - a) / 86400000));
 }
+
+/** Etisalat Egypt reserved-number pools API (no cookie/JSESSIONID required). */
+export const ETISALAT_ENDPOINT =
+  "https://www.etisalat.eg/Saytar/rest/dialReservationWS/getDials?type=GetPoolDialsRequest";
+export const ETISALAT_REFERER = "https://www.etisalat.eg/eshop2/";
+export const ETISALAT_APP_NAME = process.env.ETISALAT_APP_NAME || "MAB";
+export const ETISALAT_APP_PASSWORD =
+  process.env.ETISALAT_APP_PASSWORD || "ZFZyqUpqeO9TMhXg4R/9qs0Igwg=";
+
+/**
+ * Etisalat premium pools, ordered low→high tier. `bonus` is added to a number's
+ * heuristic score (capped at 100); higher bonus also wins cross-pool dedupe.
+ */
+export const ETISALAT_POOLS = [
+  { poolId: 135, tier: "silver", bonus: 0 },
+  { poolId: 136, tier: "golden", bonus: 4 },
+  { poolId: 137, tier: "golden_plus", bonus: 8 },
+  { poolId: 138, tier: "platinum", bonus: 12 },
+  { poolId: 139, tier: "platinum_plus", bonus: 16 },
+];
+
+/** Score bonus for an Etisalat operator tier slug; 0 for unknown/empty. */
+export function tierBonus(tier) {
+  const p = ETISALAT_POOLS.find((x) => x.tier === tier);
+  return p ? p.bonus : 0;
+}
