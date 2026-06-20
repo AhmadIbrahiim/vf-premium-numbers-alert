@@ -63,6 +63,11 @@ export const ETISALAT_ENDPOINT =
   "https://www.etisalat.eg/Saytar/rest/dialReservationWS/getDials?type=GetPoolDialsRequest";
 export const ETISALAT_REFERER = "https://www.etisalat.eg/eshop2/";
 export const ETISALAT_APP_NAME = process.env.ETISALAT_APP_NAME || "MAB";
+// NOTE: applicationName/applicationPassword are STATIC client-side gating headers
+// shipped in Etisalat's public web app (etisalat.eg/eshop2) — extractable by anyone
+// from browser devtools, not a private secret. Same class as the hardcoded Vodafone
+// X_CONTEXT_REQUEST above. Kept as a literal default so the poller runs out-of-the-box;
+// override via the ETISALAT_APP_PASSWORD env var if Etisalat rotates it.
 export const ETISALAT_APP_PASSWORD =
   process.env.ETISALAT_APP_PASSWORD || "ZFZyqUpqeO9TMhXg4R/9qs0Igwg=";
 
