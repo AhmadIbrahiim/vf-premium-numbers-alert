@@ -37,10 +37,11 @@ export async function readState(dir) {
  * @param {string[]} p.available          available msisdns this run
  * @param {Map<string,{score:number,tags:string[]}>} p.scoreMap  msisdn -> score/tags
  * @param {Map<string,number>} p.gradeMap msisdn -> grade (from best_thirty), optional
+ * @param {Map<string,string>} [p.simTypeMap] msisdn -> "ESIM"|"PHYSICAL" (line source)
  * @param {string} p.today                YYYY-MM-DD
  * @returns {Record<string,any>}
  */
-export function updateHistory({ history, available, scoreMap, gradeMap, today }) {
+export function updateHistory({ history, available, scoreMap, gradeMap, simTypeMap = new Map(), today }) {
   const next = {};
   // Carry forward all known numbers, marking absent ones as gone.
   for (const [msisdn, entry] of Object.entries(history)) {
@@ -57,6 +58,7 @@ export function updateHistory({ history, available, scoreMap, gradeMap, today })
       score: s.score,
       tags: s.tags,
       best_grade: bestGrade,
+      sim_type: simTypeMap.get(msisdn) || prev?.sim_type || "",
       status: "available",
     };
   }
@@ -67,7 +69,7 @@ export function updateHistory({ history, available, scoreMap, gradeMap, today })
  * Build the dashboard-facing latest.json payload.
  * @returns {object}
  */
-export function buildLatest({ total, bestThirty, history, diff, today, generatedAt, available = [], scoreMap = new Map() }) {
+export function buildLatest({ total, bestThirty, history, diff, today, generatedAt, available = [], scoreMap = new Map(), simTypeMap = new Map() }) {
   const best_thirty = bestThirty.map((c) => {
     const h = history[c.msisdn] || {};
     return {
@@ -76,6 +78,7 @@ export function buildLatest({ total, bestThirty, history, diff, today, generated
       grade: c.grade,
       reason: c.reason,
       tags: c.tags || h.tags || [],
+      sim_type: simTypeMap.get(c.msisdn) || h.sim_type || "",
       is_new: diff.newSet.has(c.msisdn),
       first_seen: h.first_seen || today,
       age_days: dayDiff(h.first_seen || today, today),
@@ -93,6 +96,7 @@ export function buildLatest({ total, bestThirty, history, diff, today, generated
         msisdn,
         score: s.score,
         tags: s.tags,
+        sim_type: simTypeMap.get(msisdn) || h.sim_type || "",
         is_new: diff.newSet.has(msisdn),
         first_seen: h.first_seen || today,
         age_days: dayDiff(h.first_seen || today, today),

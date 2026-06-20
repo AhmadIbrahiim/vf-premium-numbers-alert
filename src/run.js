@@ -60,7 +60,11 @@ export async function run({ fetchImpl } = {}) {
 
   // 2. score + available set
   const scoreMap = new Map();
-  for (const r of records) scoreMap.set(r.msisdn, scoreMsisdn(r.msisdn));
+  const simTypeMap = new Map(); // msisdn -> "ESIM" | "PHYSICAL" (line source)
+  for (const r of records) {
+    scoreMap.set(r.msisdn, scoreMsisdn(r.msisdn));
+    simTypeMap.set(r.msisdn, r.simType);
+  }
   const available = records.filter((r) => r.available).map((r) => r.msisdn);
 
   // 3. read prior state + diff
@@ -101,11 +105,11 @@ export async function run({ fetchImpl } = {}) {
   const gradeMap = new Map(bestThirty.map((c) => [c.msisdn, c.grade]));
 
   // 5. persist
-  const nextHistory = updateHistory({ history, available, scoreMap, gradeMap, today });
+  const nextHistory = updateHistory({ history, available, scoreMap, gradeMap, simTypeMap, today });
   const diffWithSet = { ...diff, newSet: new Set(diff.isBaseline ? [] : diff.newMsisdns) };
   const latest = buildLatest({
     total: totalElements, bestThirty, history: nextHistory, diff: diffWithSet, today, generatedAt,
-    available, scoreMap,
+    available, scoreMap, simTypeMap,
   });
   const nextEvents = appendEvents(events, { today, generatedAt, diff: diffWithSet });
   await writeState(DATA_DIR, { history: nextHistory, latest, events: nextEvents });

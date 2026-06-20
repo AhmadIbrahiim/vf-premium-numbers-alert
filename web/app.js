@@ -103,10 +103,17 @@ function copyButton(msisdn) {
   return b;
 }
 
+/** SIM line-source pill: eSIM (indigo) vs Physical (sky), so the two are distinguishable. */
+function simBadge(parent, row) {
+  if (row.sim_type === "ESIM") parent.appendChild(el("span", "rounded-md bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-500/30 dark:text-indigo-300", "eSIM"));
+  else if (row.sim_type === "PHYSICAL") parent.appendChild(el("span", "rounded-md bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-700 ring-1 ring-sky-500/30 dark:text-sky-300", "Physical"));
+}
+
 function badges(parent, row) {
   if (row.is_new) parent.appendChild(el("span", "rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-300", "New"));
   if (row.status === "gone") parent.appendChild(el("span", "rounded-md bg-zinc-400/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500 ring-1 ring-zinc-400/30 dark:text-zinc-400", "Gone"));
   else if (state.view === "ever") parent.appendChild(el("span", "rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700/80 ring-1 ring-emerald-500/20 dark:text-emerald-300/80", "Live"));
+  simBadge(parent, row);
 }
 
 function tagPills(row, max) {
@@ -146,6 +153,7 @@ function bestEver() {
       score: e.score ?? 0,
       reason: e.status === "gone" ? "no longer available" : "currently available",
       tags: e.tags || [],
+      sim_type: e.sim_type || "",
       is_new: false,
       first_seen: e.first_seen || "",
       age_days: 0,
@@ -194,6 +202,7 @@ function buildChangeRow(msisdn, type) {
     score: fromBest?.score ?? h.score ?? 0,
     reason: fromBest?.reason || (type === "new" ? "newly added" : "no longer available"),
     tags: fromBest?.tags || h.tags || [],
+    sim_type: fromBest?.sim_type || h.sim_type || "",
     is_new: type === "new",
     status: type === "gone" ? "gone" : "available",
     age_days: fromBest?.age_days ?? 0,

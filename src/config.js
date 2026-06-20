@@ -5,7 +5,7 @@
 
 export const ENDPOINT =
   "https://eshop.vodafone.com.eg/ecommerce/api/catalog/commerce/phone-numbers/type/red" +
-  "?cq=simType==ESIM;simFamilyType==OWNER&query=in&size=5555&page=0&shuffle=0&tariffName=";
+  "?cq=(simType==ESIM,simType==PHYSICAL);simFamilyType==OWNER&query=in&size=5555&page=0&shuffle=0&tariffName=";
 
 /** Static context header that gates the API (no cookie/token required). */
 export const X_CONTEXT_REQUEST = JSON.stringify({
