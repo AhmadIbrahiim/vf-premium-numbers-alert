@@ -38,10 +38,12 @@ export async function readState(dir) {
  * @param {Map<string,{score:number,tags:string[]}>} p.scoreMap  msisdn -> score/tags
  * @param {Map<string,number>} p.gradeMap msisdn -> grade (from best_thirty), optional
  * @param {Map<string,string>} [p.simTypeMap] msisdn -> "ESIM"|"PHYSICAL" (line source)
+ * @param {Map<string,string>} [p.carrierMap] msisdn -> carrier
+ * @param {Map<string,string>} [p.tierMap] msisdn -> tier
  * @param {string} p.today                YYYY-MM-DD
  * @returns {Record<string,any>}
  */
-export function updateHistory({ history, available, scoreMap, gradeMap, simTypeMap = new Map(), today }) {
+export function updateHistory({ history, available, scoreMap, gradeMap, simTypeMap = new Map(), carrierMap = new Map(), tierMap = new Map(), today }) {
   const next = {};
   // Carry forward all known numbers, marking absent ones as gone.
   for (const [msisdn, entry] of Object.entries(history)) {
@@ -59,6 +61,8 @@ export function updateHistory({ history, available, scoreMap, gradeMap, simTypeM
       tags: s.tags,
       best_grade: bestGrade,
       sim_type: simTypeMap.get(msisdn) || prev?.sim_type || "",
+      carrier: carrierMap.get(msisdn) || prev?.carrier || "vodafone",
+      tier: tierMap.get(msisdn) || prev?.tier || "",
       status: "available",
     };
   }
@@ -69,7 +73,7 @@ export function updateHistory({ history, available, scoreMap, gradeMap, simTypeM
  * Build the dashboard-facing latest.json payload.
  * @returns {object}
  */
-export function buildLatest({ total, bestThirty, history, diff, today, generatedAt, available = [], scoreMap = new Map(), simTypeMap = new Map() }) {
+export function buildLatest({ total, bestThirty, history, diff, today, generatedAt, available = [], scoreMap = new Map(), simTypeMap = new Map(), carrierMap = new Map(), tierMap = new Map() }) {
   const best_thirty = bestThirty.map((c) => {
     const h = history[c.msisdn] || {};
     return {
@@ -79,6 +83,8 @@ export function buildLatest({ total, bestThirty, history, diff, today, generated
       reason: c.reason,
       tags: c.tags || h.tags || [],
       sim_type: simTypeMap.get(c.msisdn) || h.sim_type || "",
+      carrier: carrierMap.get(c.msisdn) || h.carrier || "vodafone",
+      tier: tierMap.get(c.msisdn) || h.tier || "",
       is_new: diff.newSet.has(c.msisdn),
       first_seen: h.first_seen || today,
       age_days: dayDiff(h.first_seen || today, today),
@@ -97,6 +103,8 @@ export function buildLatest({ total, bestThirty, history, diff, today, generated
         score: s.score,
         tags: s.tags,
         sim_type: simTypeMap.get(msisdn) || h.sim_type || "",
+        carrier: carrierMap.get(msisdn) || h.carrier || "vodafone",
+        tier: tierMap.get(msisdn) || h.tier || "",
         is_new: diff.newSet.has(msisdn),
         first_seen: h.first_seen || today,
         age_days: dayDiff(h.first_seen || today, today),
