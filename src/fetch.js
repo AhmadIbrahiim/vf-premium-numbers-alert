@@ -188,3 +188,19 @@ export async function fetchEtisalat(opts = {}) {
   }));
   return { records, totalElements: records.length, returned };
 }
+
+/**
+ * Fetch both carriers and merge. Rejects if EITHER source rejects, so the caller
+ * skips the run and never overwrites good data with a partial set.
+ *
+ * @param {object} [opts] - forwarded to fetchVodafone/fetchEtisalat (e.g. fetchImpl, retries)
+ * @returns {Promise<{ records: Record[], totalElements: number, returned: number }>}
+ */
+export async function fetchAll(opts = {}) {
+  const [vf, et] = await Promise.all([fetchVodafone(opts), fetchEtisalat(opts)]);
+  return {
+    records: [...vf.records, ...et.records],
+    totalElements: vf.totalElements + et.totalElements,
+    returned: vf.returned + et.returned,
+  };
+}
