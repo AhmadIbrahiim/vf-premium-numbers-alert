@@ -51,8 +51,8 @@ export async function gradeCandidates(candidates, opts = {}) {
     "You are a specialist grader for the EGYPTIAN VIP phone number market. Dealers pay 500–50,000+ EGP " +
     "for numbers with strong patterns. Judge the LAST 8 DIGITS only (the 010/011/012/015 prefix is commodity).\n\n" +
     "WHAT DRIVES VALUE — in order of importance:\n" +
-    "1. REPETITION DENSITY: More of the same digit = more valuable. Six identical digits beats four.\n" +
-    "2. ZEROS: Zeros are highly prized (easy to dictate, looks impressive). Extra zeros always lift the grade.\n" +
+    "1. REPETITION DENSITY: More of the same digit = more valuable (especially 0 or 1). Six identical digits beats four.\n" +
+    "2. ZEROS & ONES: Zeros and ones are highly prized (easy to dictate, looks impressive). Extra 0s/1s always lift the grade.\n" +
     "3. SEQUENTIAL RUNS: 12345678, 87654321, or partial runs of 5+ digits.\n" +
     "4. EASY TO DICTATE: Can you describe it in ≤5 words? (\"five twos then six\", \"all nines\", \"one-two alternating\") → 75+.\n" +
     "5. COMBINATION BONUS: Two or more patterns together always grade higher than either alone.\n\n" +
@@ -72,6 +72,7 @@ export async function gradeCandidates(candidates, opts = {}) {
     "- A plain palindrome alone (e.g. 44688644) is mid-tier (58-68), NOT premium. It needs heavy repetition " +
     "or zeros to reach 85+.\n" +
     "- When patterns combine (e.g. palindrome + triple repeat + trailing zero), add 10-15 to what either alone would earn.\n" +
+    "- Tie-breaker: prefer numbers with heavier 0/1 concentration or repeated same-digit clusters.\n" +
     "- Prefer false-positive over false-negative: if unsure between two tiers, go higher.\n\n" +
     "From the supplied list, pick and rank the best " +
     count +
