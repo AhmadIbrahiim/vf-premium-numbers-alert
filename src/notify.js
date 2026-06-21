@@ -25,6 +25,13 @@ function simLabel(simType) {
   return "—";
 }
 
+/** Human label for the carrier. */
+function carrierLabel(carrier) {
+  if (carrier === "etisalat") return "Etisalat";
+  if (carrier === "vodafone") return "Vodafone";
+  return "—";
+}
+
 /** Highest grade among the alerted numbers (drives the tier marker). */
 export function topGrade(newPremium) {
   return newPremium.reduce((m, n) => Math.max(m, n.grade ?? 0), 0);
@@ -40,11 +47,11 @@ export function buildIssueBody({ newPremium, generatedAt, repo }) {
   const lines = [
     `**${newPremium.length} new premium number(s)** detected at ${generatedAt}.`,
     "",
-    "| | # | Number | SIM | Grade | Why |",
-    "|---|---|--------|-----|-------|-----|",
+    "| | # | Number | Carrier | SIM | Grade | Why |",
+    "|---|---|--------|---------|-----|-------|-----|",
   ];
   newPremium.forEach((n, i) => {
-    lines.push(`| ${tierMark(n.grade)} | ${i + 1} | \`${formatMsisdn(n.msisdn)}\` | ${simLabel(n.sim_type)} | ${n.grade} | ${n.reason || (n.tags || []).join(", ")} |`);
+    lines.push(`| ${tierMark(n.grade)} | ${i + 1} | \`${formatMsisdn(n.msisdn)}\` | ${carrierLabel(n.carrier)} | ${simLabel(n.sim_type)} | ${n.grade} | ${n.reason || (n.tags || []).join(", ")} |`);
   });
   if (repo) {
     lines.push("", `Dashboard: https://${repo.split("/")[0]}.github.io/${repo.split("/")[1]}/`);
