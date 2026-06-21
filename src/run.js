@@ -18,10 +18,13 @@ import {
 } from "./config.js";
 
 /** Stable signature of the *meaningful* state, so we only commit on real change. */
-function signature(available, bestThirty) {
+function signature(available, bestThirty, tierMap = new Map()) {
   const payload = {
     a: [...available].sort(),
     b: bestThirty.map((c) => `${c.msisdn}:${c.grade}`),
+    // Include carrier tier/grade so a metadata-only change (e.g. a WE number re-graded)
+    // still flips the signature and triggers a commit.
+    t: [...available].sort().map((m) => `${m}:${tierMap.get(m) || ""}`),
   };
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
 }
@@ -61,15 +64,16 @@ export async function run({ fetchImpl } = {}) {
   // 2. score (+ Etisalat tier bonus) + available set
   const scoreMap = new Map();
   const simTypeMap = new Map(); // msisdn -> "ESIM" | "PHYSICAL" (Vodafone line source)
-  const carrierMap = new Map(); // msisdn -> "vodafone" | "etisalat"
-  const tierMap = new Map();    // msisdn -> Etisalat tier slug ("" for Vodafone)
+  const carrierMap = new Map(); // msisdn -> "vodafone" | "etisalat" | "we"
+  const tierMap = new Map();    // msisdn -> Etisalat tier slug / WE grade code ("" for Vodafone)
   for (const r of records) {
     const base = scoreMsisdn(r.msisdn);
     const tier = r.tier || "";
-    const bonus = tier ? tierBonus(tier) : 0;
-    // Tag every Etisalat number with its tier (even silver, whose bonus is 0) so
-    // the operator tier reaches the LLM candidate payload and the tag pills.
-    const tags = tier ? [...base.tags, `etisalat-${tier}`] : base.tags;
+    const isEtisalat = r.carrier === "etisalat";
+    // Only Etisalat's operator tier feeds scoring. WE's `tier` is an opaque grade code:
+    // display metadata only — no bonus, no LLM tag (the digit-pattern scorer ranks it).
+    const bonus = isEtisalat ? tierBonus(tier) : 0;
+    const tags = isEtisalat && tier ? [...base.tags, `etisalat-${tier}`] : base.tags;
     scoreMap.set(r.msisdn, { score: Math.min(100, base.score + bonus), tags });
     simTypeMap.set(r.msisdn, r.simType);
     carrierMap.set(r.msisdn, r.carrier || "vodafone");
@@ -131,7 +135,7 @@ export async function run({ fetchImpl } = {}) {
   const notifyResult = await notify(newPremium, { token: GITHUB_TOKEN, repo: REPO });
 
   // 7. change detection for commit gating
-  const sig = signature(available, bestThirty);
+  const sig = signature(available, bestThirty, tierMap);
   let prevSig = "";
   try { prevSig = (await readFile(join(DATA_DIR, "signature.txt"), "utf8")).trim(); } catch {}
   const changed = sig !== prevSig;

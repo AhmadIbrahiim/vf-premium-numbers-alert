@@ -14,7 +14,7 @@ const state = {
   view: "now", // "now" | "ever" | "changes"
   filter: "",
   sort: "grade",
-  carrier: "all", // "all" | "vodafone" | "etisalat"
+  carrier: "all", // "all" | "vodafone" | "etisalat" | "we"
   error: false,
   renderLimit: 300,
 };
@@ -50,7 +50,16 @@ const TIER_LABEL = {
 /** Carrier of a row, inferring from the msisdn prefix for older data without the field. */
 function carrierOf(r) {
   if (r.carrier) return r.carrier;
-  return normalizedMsisdn(r?.msisdn).startsWith("011") ? "etisalat" : "vodafone";
+  const m = normalizedMsisdn(r?.msisdn);
+  if (m.startsWith("015")) return "we";
+  if (m.startsWith("011")) return "etisalat";
+  return "vodafone";
+}
+
+/** Short label for a WE grade code, e.g. "GRADE_017" -> "G17". */
+function gradeLabel(tier) {
+  const m = /^GRADE_0*(\d+)$/.exec(tier || "");
+  return m ? "G" + m[1] : "";
 }
 
 function relTime(iso) {
@@ -131,10 +140,16 @@ function copyButton(msisdn) {
   return b;
 }
 
-/** Carrier pill (Vodafone red / Etisalat green), tier pill (Etisalat), and SIM pill (Vodafone). */
+/** Carrier pill (Vodafone red / Etisalat green / WE purple), tier/grade pill, SIM pill (Vodafone). */
 function carrierBadges(parent, row) {
   const carrier = carrierOf(row);
-  if (carrier === "etisalat") {
+  if (carrier === "we") {
+    parent.appendChild(el("span", "rounded-md bg-purple-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-purple-700 ring-1 ring-purple-500/30 dark:text-purple-300", "WE"));
+    const g = gradeLabel(row.tier);
+    if (g) {
+      parent.appendChild(el("span", "rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-300", g));
+    }
+  } else if (carrier === "etisalat") {
     parent.appendChild(el("span", "rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-300", "Etisalat"));
     if (row.tier && TIER_LABEL[row.tier]) {
       parent.appendChild(el("span", "rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-300", TIER_LABEL[row.tier]));

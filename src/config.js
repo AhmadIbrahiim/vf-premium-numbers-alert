@@ -88,3 +88,48 @@ export function tierBonus(tier) {
   const p = ETISALAT_POOLS.find((x) => x.tier === tier);
   return p ? p.bonus : 0;
 }
+
+/** Read a positive-integer env var, falling back to `def`; throws on invalid input. */
+function intEnv(name, def) {
+  const v = process.env[name];
+  if (v === undefined) return def;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1) throw new Error(`${name} must be a positive integer`);
+  return n;
+}
+
+/** WE Egypt (Telecom Egypt) reserved-number search API. */
+export const WE_ENDPOINT =
+  "https://numbers.te.eg/echannel/service/besapp/base/rest/busiservice/cz/v1/offering/queryAvailabeNumbers";
+
+// NOTE: channelId / deviceId / whiteReqHeaderSign / whiteReqBodySign / x-init-time are STATIC
+// client-side gating tokens shipped in WE's public number-booking web app (numbers.te.eg) —
+// extractable by anyone from browser devtools, not private secrets. Verified: the signatures
+// are constant, are NOT validated against the request body, and no cookies are required — i.e.
+// gating tokens of the same class as the Vodafone X_CONTEXT_REQUEST header above. Kept as
+// literal defaults so the poller runs out-of-the-box; override via env if WE rotates them
+// (the poller fails closed — skips the run, preserving data — if the tokens are rejected).
+export const WE_CHANNEL_ID = process.env.WE_CHANNEL_ID || "713";
+export const WE_DEVICE_ID =
+  process.env.WE_DEVICE_ID || "20c6209549c92db184dd5dd9e3a5156fb0d548bcb64e0a60493476bf66ce61ae";
+export const WE_HEADER_SIGN =
+  process.env.WE_HEADER_SIGN ||
+  "885bf9e277ee3ef0bbc59126bcf484e908a07bcfe5cfd22bd3a422000118fadb43dd92863357a9b317e3f57cd8169a1824e8125cc8a3b862c2390dc2d0286d67";
+export const WE_BODY_SIGN =
+  process.env.WE_BODY_SIGN ||
+  "a4acd02196c9ebaec68e60a5c4429c573672c9b5665ca13e87d80ce9051804991b6c78625ef4df46833fc56dcbccb25e7a96e2e981e8abc8c878e5bc21ab201a";
+export const WE_INIT_TIME = process.env.WE_INIT_TIME || "1782066349291";
+
+/** WE grade-enumeration + pagination bounds (validated positive integers). */
+export const WE_GRADE_MIN = intEnv("WE_GRADE_MIN", 1);
+export const WE_GRADE_MAX = intEnv("WE_GRADE_MAX", 30);
+export const WE_PAGE_SIZE = intEnv("WE_PAGE_SIZE", 51);
+export const WE_MAX_PAGES = intEnv("WE_MAX_PAGES", 20);
+if (WE_GRADE_MIN > WE_GRADE_MAX) {
+  throw new Error("WE_GRADE_MIN must be <= WE_GRADE_MAX");
+}
+
+/** WE numberlevel grade slug for an integer grade, e.g. 17 -> "GRADE_017". */
+export function weGradeSlug(n) {
+  return "GRADE_" + String(n).padStart(3, "0");
+}

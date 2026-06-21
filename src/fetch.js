@@ -9,6 +9,17 @@ import {
   ETISALAT_APP_NAME,
   ETISALAT_APP_PASSWORD,
   ETISALAT_POOLS,
+  WE_ENDPOINT,
+  WE_CHANNEL_ID,
+  WE_DEVICE_ID,
+  WE_HEADER_SIGN,
+  WE_BODY_SIGN,
+  WE_INIT_TIME,
+  WE_GRADE_MIN,
+  WE_GRADE_MAX,
+  WE_PAGE_SIZE,
+  WE_MAX_PAGES,
+  weGradeSlug,
 } from "./config.js";
 
 /** @typedef {{ id: string, msisdn: string, available: boolean, price: number, simType: string, tariffs: string[], carrier: string, tier: string }} Record */
@@ -18,20 +29,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const MSISDN_RE = /^01[0125]\d{8}$/;
 
 /**
- * GET `url` and return parsed JSON, with retry/backoff. Fails fast on non-429 4xx.
+ * Issue `url` (GET by default, or POST with `body`) and return parsed JSON, with
+ * retry/backoff. Fails fast on non-429 4xx (breaks out of the retry loop immediately).
  * Throws (with `label` in the message) on persistent failure.
  */
-async function fetchJsonWithRetry({ doFetch, url, headers, retries, baseDelayMs, timeoutMs, label }) {
+async function fetchJsonWithRetry({ doFetch, url, method = "GET", headers, body, retries, baseDelayMs, timeoutMs, label }) {
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt > 0) await sleep(baseDelayMs * 2 ** (attempt - 1));
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await doFetch(url, { method: "GET", signal: controller.signal, headers });
+      const res = await doFetch(url, { method, signal: controller.signal, headers, ...(body != null ? { body } : {}) });
       if (!res.ok) {
         lastErr = new Error(`HTTP ${res.status}`);
-        if (res.status >= 400 && res.status < 500 && res.status !== 429) throw lastErr;
+        // 4xx (other than 429) won't fix themselves on retry — stop retrying immediately.
+        if (res.status >= 400 && res.status < 500 && res.status !== 429) break;
         continue;
       }
       return await res.json();
@@ -189,18 +202,102 @@ export async function fetchEtisalat(opts = {}) {
   return { records, totalElements: records.length, returned };
 }
 
+/** Build the WE static gating headers (x-client-time is per-request but not signed). */
+function weHeaders() {
+  return {
+    accept: "application/json, text/plain, */*",
+    "content-type": "application/json",
+    csrftoken: "",
+    languageCode: "en-US",
+    isMobile: "false",
+    isCoporate: "true",
+    isSelfcare: "true",
+    channelId: WE_CHANNEL_ID,
+    isOperator: "false",
+    isRetail: "false",
+    isDealer: "false",
+    isDealerCust: "N",
+    deviceId: WE_DEVICE_ID,
+    "x-client-time": String(Date.now()),
+    "x-init-time": WE_INIT_TIME,
+    whiteReqHeaderSign: WE_HEADER_SIGN,
+    whiteReqBodySign: WE_BODY_SIGN,
+  };
+}
+
 /**
- * Fetch both carriers and merge. Rejects if EITHER source rejects, so the caller
- * skips the run and never overwrites good data with a partial set.
+ * Fetch WE premium numbers across all inventory grades. For each grade GRADE_min..max,
+ * page through results (all-wildcard pattern) until a short/empty page. Maps each telnum
+ * (integer, no leading 0) to an msisdn. Dedupes by msisdn (first grade wins). Throws on a
+ * rejected query (retCode != "0"), a transport failure, or if a grade exceeds WE_MAX_PAGES
+ * while still returning full pages — so the caller skips the run rather than treat truncated
+ * inventory as complete (which would surface missed numbers as false disappearances).
  *
- * @param {object} [opts] - forwarded to fetchVodafone/fetchEtisalat (e.g. fetchImpl, retries)
+ * @param {object} [opts] - { fetchImpl, retries=4, baseDelayMs=1000, timeoutMs=45000, gradeMin, gradeMax }
+ * @returns {Promise<{ records: Record[], totalElements: number, returned: number }>}
+ */
+export async function fetchWe(opts = {}) {
+  const doFetch = opts.fetchImpl || globalThis.fetch;
+  const retries = opts.retries ?? 4;
+  const baseDelayMs = opts.baseDelayMs ?? 1000;
+  const timeoutMs = opts.timeoutMs ?? 45000;
+  const gradeMin = opts.gradeMin ?? WE_GRADE_MIN;
+  const gradeMax = opts.gradeMax ?? WE_GRADE_MAX;
+
+  const byMsisdn = new Map(); // msisdn -> grade slug (first grade wins)
+  let returned = 0;
+
+  for (let g = gradeMin; g <= gradeMax; g++) {
+    const grade = weGradeSlug(g);
+    let exhausted = false;
+    for (let page = 1; page <= WE_MAX_PAGES; page++) {
+      const body = await fetchJsonWithRetry({
+        doFetch,
+        url: WE_ENDPOINT,
+        method: "POST",
+        headers: weHeaders(),
+        body: JSON.stringify({ fitmod: "15????????", maxCount: String(WE_PAGE_SIZE), pageindex: String(page), numberlevel: grade }),
+        retries, baseDelayMs, timeoutMs,
+        label: `fetchWe ${grade} p${page}`,
+      });
+      const retCode = String(body?.header?.retCode ?? "");
+      if (retCode !== "0") {
+        throw new Error(`fetchWe ${grade} rejected: retCode ${retCode}`);
+      }
+      const list = Array.isArray(body?.body?.telnumlist) ? body.body.telnumlist : [];
+      returned += list.length;
+      for (const item of list) {
+        const msisdn = "0" + String(item?.telnum ?? "");
+        if (!MSISDN_RE.test(msisdn)) continue;
+        if (!byMsisdn.has(msisdn)) byMsisdn.set(msisdn, grade);
+      }
+      if (list.length < WE_PAGE_SIZE) { exhausted = true; break; } // last page for this grade
+    }
+    // Fail closed: a grade still returning full pages at the cap means we'd be reporting
+    // partial inventory as the complete available set.
+    if (!exhausted) {
+      throw new Error(`fetchWe ${grade} exceeded WE_MAX_PAGES — inventory may be truncated`);
+    }
+  }
+
+  const records = [...byMsisdn.entries()].map(([msisdn, grade]) => ({
+    id: msisdn, msisdn, available: true, price: 0, simType: "", tariffs: [], carrier: "we", tier: grade,
+  }));
+  return { records, totalElements: records.length, returned };
+}
+
+/**
+ * Fetch all carriers (Vodafone + Etisalat + WE) and merge. Rejects if ANY source rejects,
+ * so the caller skips the run and never overwrites good data with a partial set.
+ *
+ * @param {object} [opts] - forwarded to each fetcher (e.g. fetchImpl, retries, gradeMin/gradeMax)
  * @returns {Promise<{ records: Record[], totalElements: number, returned: number }>}
  */
 export async function fetchAll(opts = {}) {
-  const [vf, et] = await Promise.all([fetchVodafone(opts), fetchEtisalat(opts)]);
+  const [vf, et, we] = await Promise.all([fetchVodafone(opts), fetchEtisalat(opts), fetchWe(opts)]);
   return {
-    records: [...vf.records, ...et.records],
-    totalElements: vf.totalElements + et.totalElements,
-    returned: vf.returned + et.returned,
+    records: [...vf.records, ...et.records, ...we.records],
+    totalElements: vf.totalElements + et.totalElements + we.totalElements,
+    returned: vf.returned + et.returned + we.returned,
   };
 }
