@@ -22,8 +22,17 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 
+function normalizedMsisdn(value) {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(Math.trunc(value));
+  return "";
+}
+
 function fmt(m) {
-  return `${m.slice(0, 4)} ${m.slice(4, 7)} ${m.slice(7)}`;
+  const msisdn = normalizedMsisdn(m);
+  if (!msisdn) return "—";
+  if (msisdn.length < 8) return msisdn;
+  return `${msisdn.slice(0, 4)} ${msisdn.slice(4, 7)} ${msisdn.slice(7)}`;
 }
 
 const TIER_LABEL = {
@@ -37,7 +46,7 @@ const TIER_LABEL = {
 /** Carrier of a row, inferring from the msisdn prefix for older data without the field. */
 function carrierOf(r) {
   if (r.carrier) return r.carrier;
-  return r.msisdn && r.msisdn.startsWith("011") ? "etisalat" : "vodafone";
+  return normalizedMsisdn(r?.msisdn).startsWith("011") ? "etisalat" : "vodafone";
 }
 
 function relTime(iso) {
@@ -203,6 +212,9 @@ function nowRows() {
 function currentRows() {
   if (state.view === "changes") return [];
   let rows = state.view === "now" ? nowRows() : bestEver();
+  rows = rows
+    .map((r) => ({ ...r, msisdn: normalizedMsisdn(r?.msisdn) }))
+    .filter((r) => r.msisdn);
   if (state.carrier !== "all") rows = rows.filter((r) => carrierOf(r) === state.carrier);
   const f = state.filter.replace(/\D/g, "");
   if (f) rows = rows.filter((r) => r.msisdn.replace(/\D/g, "").includes(f));
@@ -220,11 +232,12 @@ function currentRows() {
  * Falls back through best_thirty → history for grade/tags.
  */
 function buildChangeRow(msisdn, type) {
-  const h = state.history?.[msisdn] || {};
-  const fromBest = (state.latest?.best_thirty || []).find((x) => x.msisdn === msisdn);
+  const msisdnStr = normalizedMsisdn(msisdn);
+  const h = state.history?.[msisdnStr] || {};
+  const fromBest = (state.latest?.best_thirty || []).find((x) => x.msisdn === msisdnStr);
   const grade = fromBest?.grade ?? h.best_grade ?? h.score ?? 0;
   return {
-    msisdn,
+    msisdn: msisdnStr,
     grade,
     score: fromBest?.score ?? h.score ?? 0,
     reason: fromBest?.reason || (type === "new" ? "newly added" : "no longer available"),
