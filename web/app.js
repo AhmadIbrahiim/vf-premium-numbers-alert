@@ -14,6 +14,7 @@ const state = {
   view: "now", // "now" | "ever" | "changes"
   filter: "",
   sort: "grade",
+  carrier: "all", // "all" | "vodafone" | "etisalat"
   error: false,
 };
 
@@ -23,6 +24,20 @@ const $ = (id) => document.getElementById(id);
 
 function fmt(m) {
   return `${m.slice(0, 4)} ${m.slice(4, 7)} ${m.slice(7)}`;
+}
+
+const TIER_LABEL = {
+  silver: "Silver",
+  golden: "Golden",
+  golden_plus: "Golden+",
+  platinum: "Platinum",
+  platinum_plus: "Platinum+",
+};
+
+/** Carrier of a row, inferring from the msisdn prefix for older data without the field. */
+function carrierOf(r) {
+  if (r.carrier) return r.carrier;
+  return r.msisdn && r.msisdn.startsWith("011") ? "etisalat" : "vodafone";
 }
 
 function relTime(iso) {
@@ -103,17 +118,26 @@ function copyButton(msisdn) {
   return b;
 }
 
-/** SIM line-source pill: eSIM (indigo) vs Physical (sky), so the two are distinguishable. */
-function simBadge(parent, row) {
-  if (row.sim_type === "ESIM") parent.appendChild(el("span", "rounded-md bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-500/30 dark:text-indigo-300", "eSIM"));
-  else if (row.sim_type === "PHYSICAL") parent.appendChild(el("span", "rounded-md bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-700 ring-1 ring-sky-500/30 dark:text-sky-300", "Physical"));
+/** Carrier pill (Vodafone red / Etisalat green), tier pill (Etisalat), and SIM pill (Vodafone). */
+function carrierBadges(parent, row) {
+  const carrier = carrierOf(row);
+  if (carrier === "etisalat") {
+    parent.appendChild(el("span", "rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-300", "Etisalat"));
+    if (row.tier && TIER_LABEL[row.tier]) {
+      parent.appendChild(el("span", "rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-300", TIER_LABEL[row.tier]));
+    }
+  } else {
+    parent.appendChild(el("span", "rounded-md bg-vf-red/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-vf-red ring-1 ring-vf-red/30", "Vodafone"));
+    if (row.sim_type === "ESIM") parent.appendChild(el("span", "rounded-md bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-500/30 dark:text-indigo-300", "eSIM"));
+    else if (row.sim_type === "PHYSICAL") parent.appendChild(el("span", "rounded-md bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-700 ring-1 ring-sky-500/30 dark:text-sky-300", "Physical"));
+  }
 }
 
 function badges(parent, row) {
   if (row.is_new) parent.appendChild(el("span", "rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-300", "New"));
   if (row.status === "gone") parent.appendChild(el("span", "rounded-md bg-zinc-400/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500 ring-1 ring-zinc-400/30 dark:text-zinc-400", "Gone"));
   else if (state.view === "ever") parent.appendChild(el("span", "rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700/80 ring-1 ring-emerald-500/20 dark:text-emerald-300/80", "Live"));
-  simBadge(parent, row);
+  carrierBadges(parent, row);
 }
 
 function tagPills(row, max) {
@@ -177,6 +201,7 @@ function nowRows() {
 function currentRows() {
   if (state.view === "changes") return [];
   let rows = state.view === "now" ? nowRows() : bestEver();
+  if (state.carrier !== "all") rows = rows.filter((r) => carrierOf(r) === state.carrier);
   const f = state.filter.replace(/\D/g, "");
   if (f) rows = rows.filter((r) => r.msisdn.replace(/\D/g, "").includes(f));
   const by = state.sort;
@@ -342,7 +367,11 @@ function renderChanges() {
   listEl.innerHTML = "";
 
   const filterDigits = state.filter.replace(/\D/g, "");
-  const applyFilter = (rows) => (!filterDigits ? rows : rows.filter((r) => r.msisdn.replace(/\D/g, "").includes(filterDigits)));
+  const applyFilter = (rows) => {
+    let out = state.carrier === "all" ? rows : rows.filter((r) => carrierOf(r) === state.carrier);
+    if (filterDigits) out = out.filter((r) => r.msisdn.replace(/\D/g, "").includes(filterDigits));
+    return out;
+  };
 
   const timeline = changesTimeline();
 
@@ -482,6 +511,7 @@ function wire() {
   $("tab-changes").addEventListener("click", () => setView("changes"));
   $("filter").addEventListener("input", (e) => { state.filter = e.target.value; render(); });
   $("sort").addEventListener("change", (e) => { state.sort = e.target.value; render(); });
+  $("carrier").addEventListener("change", (e) => { state.carrier = e.target.value; render(); });
   $("theme").addEventListener("click", toggleTheme);
   setView("now");
   skeleton();
