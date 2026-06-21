@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildCandidates, candidateSignature, gradeCacheValid } from "../src/store.js";
+import { buildCandidates, candidateSignature, gradeCacheValid, updateHistory, buildLatest } from "../src/store.js";
 
 function scoreMap(obj) {
   return new Map(Object.entries(obj).map(([m, score]) => [m, { score, tags: [] }]));
@@ -54,4 +54,68 @@ test("gradeCacheValid only when sig matches and grades present", () => {
   assert.equal(gradeCacheValid({ sig: "x", graded: [] }, "x"), false);
   assert.equal(gradeCacheValid({ sig: "y", graded: [{}] }, "x"), false);
   assert.equal(gradeCacheValid({ sig: "x", graded: [{ msisdn: "a" }] }, "x"), true);
+});
+
+test("updateHistory stores carrier and tier for available numbers", () => {
+  const next = updateHistory({
+    history: {},
+    available: ["01199999999", "01055455833"],
+    scoreMap: new Map([
+      ["01199999999", { score: 50, tags: [] }],
+      ["01055455833", { score: 60, tags: [] }],
+    ]),
+    gradeMap: new Map(),
+    carrierMap: new Map([
+      ["01199999999", "etisalat"],
+      ["01055455833", "vodafone"],
+    ]),
+    tierMap: new Map([["01199999999", "platinum"]]),
+    today: "2026-06-20",
+  });
+  assert.equal(next["01199999999"].carrier, "etisalat");
+  assert.equal(next["01199999999"].tier, "platinum");
+  assert.equal(next["01055455833"].carrier, "vodafone");
+  assert.equal(next["01055455833"].tier, "");
+});
+
+test("updateHistory carries carrier/tier forward when a number goes gone", () => {
+  const history = {
+    "01199999999": { first_seen: "2026-06-01", last_seen: "2026-06-19", score: 50, tags: [], best_grade: 50, carrier: "etisalat", tier: "golden", status: "available" },
+  };
+  const next = updateHistory({
+    history,
+    available: [],
+    scoreMap: new Map(),
+    gradeMap: new Map(),
+    today: "2026-06-20",
+  });
+  assert.equal(next["01199999999"].status, "gone");
+  assert.equal(next["01199999999"].carrier, "etisalat");
+  assert.equal(next["01199999999"].tier, "golden");
+});
+
+test("buildLatest includes carrier and tier on rows", () => {
+  const latest = buildLatest({
+    total: 2,
+    bestThirty: [{ msisdn: "01199999999", score: 62, grade: 80, reason: "r", tags: [] }],
+    history: { "01199999999": { first_seen: "2026-06-20" }, "01055455833": {} },
+    diff: { newMsisdns: [], disappearedMsisdns: [], newSet: new Set() },
+    today: "2026-06-20",
+    generatedAt: "2026-06-20T00:00:00Z",
+    available: ["01199999999", "01055455833"],
+    scoreMap: new Map([
+      ["01199999999", { score: 62, tags: [] }],
+      ["01055455833", { score: 30, tags: [] }],
+    ]),
+    carrierMap: new Map([
+      ["01199999999", "etisalat"],
+      ["01055455833", "vodafone"],
+    ]),
+    tierMap: new Map([["01199999999", "platinum"]]),
+  });
+  assert.equal(latest.best_thirty[0].carrier, "etisalat");
+  assert.equal(latest.best_thirty[0].tier, "platinum");
+  const vf = latest.all_available.find((r) => r.msisdn === "01055455833");
+  assert.equal(vf.carrier, "vodafone");
+  assert.equal(vf.tier, "");
 });
