@@ -1,13 +1,12 @@
 {
-  "generated_at": "2026-06-20T21:43:50.946Z",
-  "total": 1563,
+  "generated_at": "2026-06-21T00:11:22.879Z",
+  "total": 1561,
   "new_count": 0,
-  "disappeared_count": 3,
+  "disappeared_count": 2,
   "new_msisdns": [],
   "disappeared_msisdns": [
-    "01055900558",
-    "01044988833",
-    "01044883330"
+    "01055633300",
+    "01005574422"
   ],
   "best_thirty": [
     {
@@ -27,7 +26,7 @@
       "msisdn": "01044495445",
       "score": 45,
       "grade": 70,
-      "reason": "triple-digit with three distinct digits and partial pair ladder",
+      "reason": "triple-digit with three distinct digits and pair-ladder partial",
       "tags": [
         "triple-digit",
         "three-distinct-digits",
@@ -62,36 +61,10 @@
       "age_days": 4
     },
     {
-      "msisdn": "01055288255",
-      "score": 36,
-      "grade": 58,
-      "reason": "palindrome with three distinct digits",
-      "tags": [
-        "palindrome",
-        "three-distinct-digits"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-03",
-      "age_days": 18
-    },
-    {
-      "msisdn": "01055788755",
-      "score": 36,
-      "grade": 58,
-      "reason": "palindrome with three distinct digits",
-      "tags": [
-        "palindrome",
-        "three-distinct-digits"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-03",
-      "age_days": 18
-    },
-    {
       "msisdn": "01044699466",
       "score": 33,
       "grade": 70,
-      "reason": "three distinct digits with partial pair ladder",
+      "reason": "three distinct digits with pair-ladder partial",
       "tags": [
         "three-distinct-digits",
         "pair-ladder-partial"
@@ -104,7 +77,7 @@
       "msisdn": "01067727766",
       "score": 33,
       "grade": 70,
-      "reason": "three distinct digits with partial pair ladder",
+      "reason": "three distinct digits with pair-ladder partial",
       "tags": [
         "three-distinct-digits",
         "pair-ladder-partial"
@@ -117,7 +90,7 @@
       "msisdn": "01055331131",
       "score": 33,
       "grade": 70,
-      "reason": "three distinct digits with partial pair ladder",
+      "reason": "three distinct digits with pair-ladder partial",
       "tags": [
         "three-distinct-digits",
         "pair-ladder-partial"
@@ -129,8 +102,8 @@
     {
       "msisdn": "01044644687",
       "score": 32,
-      "grade": 65,
-      "reason": "repeating block partial with step-2 ladder",
+      "grade": 70,
+      "reason": "repeating block partial with ladder step-2 x3",
       "tags": [
         "repeating-block-partial",
         "ladder-step2-x3"
@@ -142,8 +115,8 @@
     {
       "msisdn": "01055355318",
       "score": 32,
-      "grade": 65,
-      "reason": "repeating block partial with step-2 ladder",
+      "grade": 70,
+      "reason": "repeating block partial with ladder step-2 x3",
       "tags": [
         "repeating-block-partial",
         "ladder-step-2-x3"
@@ -153,143 +126,9 @@
       "age_days": 18
     },
     {
-      "msisdn": "01055554639",
-      "score": 30,
-      "grade": 70,
-      "reason": "repeated digit x4",
-      "tags": [
-        "repeated-digit-x4"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-17",
-      "age_days": 4
-    },
-    {
-      "msisdn": "01015988884",
-      "score": 30,
-      "grade": 70,
-      "reason": "repeated digit x4",
-      "tags": [
-        "repeated-digit-x4"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-17",
-      "age_days": 4
-    },
-    {
-      "msisdn": "01055554736",
-      "score": 30,
-      "grade": 70,
-      "reason": "repeated digit x4",
-      "tags": [
-        "repeated-digit-x4"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-17",
-      "age_days": 4
-    },
-    {
-      "msisdn": "01055557683",
-      "score": 30,
-      "grade": 70,
-      "reason": "repeated digit x4",
-      "tags": [
-        "repeated-digit-x4"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-03",
-      "age_days": 18
-    },
-    {
-      "msisdn": "01055558249",
-      "score": 30,
-      "grade": 70,
-      "reason": "repeated digit x4",
-      "tags": [
-        "repeated-digit-x4"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-03",
-      "age_days": 18
-    },
-    {
-      "msisdn": "01055557924",
-      "score": 30,
-      "grade": 70,
-      "reason": "repeated digit x4",
-      "tags": [
-        "repeated-digit-x4"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-03",
-      "age_days": 18
-    },
-    {
-      "msisdn": "01044684888",
-      "score": 30,
-      "grade": 70,
-      "reason": "triple-digit with three distinct digits and step-2 ladder",
-      "tags": [
-        "triple-digit",
-        "three-distinct-digits",
-        "ladder-step2-x3"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-17",
-      "age_days": 4
-    },
-    {
-      "msisdn": "01044699443",
-      "score": 29,
-      "grade": 65,
-      "reason": "pair ladder partial",
-      "tags": [
-        "pair-ladder-partial"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-03",
-      "age_days": 18
-    },
-    {
-      "msisdn": "01044699442",
-      "score": 29,
-      "grade": 65,
-      "reason": "pair ladder partial",
-      "tags": [
-        "pair-ladder-partial"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-03",
-      "age_days": 18
-    },
-    {
-      "msisdn": "01044699440",
-      "score": 29,
-      "grade": 65,
-      "reason": "pair ladder partial",
-      "tags": [
-        "pair-ladder-partial"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-03",
-      "age_days": 18
-    },
-    {
-      "msisdn": "01044577077",
-      "score": 29,
-      "grade": 65,
-      "reason": "pair ladder partial",
-      "tags": [
-        "pair-ladder-partial"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-03",
-      "age_days": 18
-    },
-    {
       "msisdn": "01044844883",
       "score": 26,
-      "grade": 65,
+      "grade": 70,
       "reason": "repeating block partial with three distinct digits",
       "tags": [
         "repeating-block-partial",
@@ -302,7 +141,7 @@
     {
       "msisdn": "01044844881",
       "score": 26,
-      "grade": 65,
+      "grade": 70,
       "reason": "repeating block partial with three distinct digits",
       "tags": [
         "repeating-block-partial",
@@ -315,7 +154,7 @@
     {
       "msisdn": "01099484484",
       "score": 26,
-      "grade": 65,
+      "grade": 70,
       "reason": "repeating block partial with three distinct digits",
       "tags": [
         "repeating-block-partial",
@@ -329,7 +168,7 @@
       "msisdn": "01044688822",
       "score": 26,
       "grade": 70,
-      "reason": "triple-digit with step-2 ladder",
+      "reason": "triple-digit with ladder step-2 x3",
       "tags": [
         "triple-digit",
         "ladder-step2-x3"
@@ -341,7 +180,7 @@
     {
       "msisdn": "01024332332",
       "score": 26,
-      "grade": 65,
+      "grade": 70,
       "reason": "repeating block partial with three distinct digits",
       "tags": [
         "repeating-block-partial",
@@ -355,7 +194,7 @@
       "msisdn": "01044852444",
       "score": 26,
       "grade": 70,
-      "reason": "triple-digit with step-3 ladder",
+      "reason": "triple-digit with ladder step-3 x3",
       "tags": [
         "triple-digit",
         "ladder-step-3-x3"
@@ -367,7 +206,7 @@
     {
       "msisdn": "01034334355",
       "score": 26,
-      "grade": 65,
+      "grade": 70,
       "reason": "repeating block partial with three distinct digits",
       "tags": [
         "repeating-block-partial",
@@ -380,7 +219,7 @@
     {
       "msisdn": "01044844882",
       "score": 26,
-      "grade": 65,
+      "grade": 70,
       "reason": "repeating block partial with three distinct digits",
       "tags": [
         "repeating-block-partial",
@@ -389,22 +228,12 @@
       "is_new": false,
       "first_seen": "2026-06-03",
       "age_days": 18
-    }
-  ],
-  "all_available": [
-    {
-      "msisdn": "01062833339",
-      "score": 30,
-      "tags": [
-        "repeated-digit-x4"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-17",
-      "age_days": 4
     },
     {
       "msisdn": "01044984984",
       "score": 26,
+      "grade": 70,
+      "reason": "repeating block partial with three distinct digits",
       "tags": [
         "repeating-block-partial",
         "three-distinct-digits"
@@ -416,6 +245,8 @@
     {
       "msisdn": "01034334388",
       "score": 26,
+      "grade": 70,
+      "reason": "repeating block partial with three distinct digits",
       "tags": [
         "repeating-block-partial",
         "three-distinct-digits"
@@ -425,19 +256,10 @@
       "age_days": 18
     },
     {
-      "msisdn": "01055633300",
-      "score": 24,
-      "tags": [
-        "triple-digit",
-        "ending-00"
-      ],
-      "is_new": false,
-      "first_seen": "2026-06-11",
-      "age_days": 10
-    },
-    {
       "msisdn": "01044487700",
       "score": 24,
+      "grade": 70,
+      "reason": "triple-digit with ending-00",
       "tags": [
         "triple-digit",
         "ending-00"
@@ -449,6 +271,8 @@
     {
       "msisdn": "01044911100",
       "score": 24,
+      "grade": 70,
+      "reason": "triple-digit with ending-00",
       "tags": [
         "triple-digit",
         "ending-00"
@@ -460,6 +284,8 @@
     {
       "msisdn": "01044488300",
       "score": 24,
+      "grade": 70,
+      "reason": "triple-digit with ending-00",
       "tags": [
         "triple-digit",
         "ending-00"
@@ -471,6 +297,8 @@
     {
       "msisdn": "01044711100",
       "score": 24,
+      "grade": 70,
+      "reason": "triple-digit with ending-00",
       "tags": [
         "triple-digit",
         "ending-00"
@@ -482,6 +310,8 @@
     {
       "msisdn": "01044483300",
       "score": 24,
+      "grade": 70,
+      "reason": "triple-digit with ending-00",
       "tags": [
         "triple-digit",
         "ending-00"
@@ -493,6 +323,8 @@
     {
       "msisdn": "01044677700",
       "score": 24,
+      "grade": 70,
+      "reason": "triple-digit with ending-00",
       "tags": [
         "triple-digit",
         "ending-00"
@@ -504,6 +336,8 @@
     {
       "msisdn": "01066246600",
       "score": 22,
+      "grade": 70,
+      "reason": "ending-00 with ladder step-2 x3",
       "tags": [
         "ending-00",
         "ladder-step2-x3"
@@ -515,6 +349,8 @@
     {
       "msisdn": "01044644628",
       "score": 22,
+      "grade": 70,
+      "reason": "repeating block partial",
       "tags": [
         "repeating-block-partial"
       ],
@@ -525,6 +361,8 @@
     {
       "msisdn": "01055455493",
       "score": 22,
+      "grade": 70,
+      "reason": "repeating block partial",
       "tags": [
         "repeating-block-partial"
       ],
@@ -535,6 +373,8 @@
     {
       "msisdn": "01055755706",
       "score": 22,
+      "grade": 70,
+      "reason": "repeating block partial",
       "tags": [
         "repeating-block-partial"
       ],
@@ -545,8 +385,156 @@
     {
       "msisdn": "01094494471",
       "score": 22,
+      "grade": 70,
+      "reason": "repeating block partial",
       "tags": [
         "repeating-block-partial"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-03",
+      "age_days": 18
+    }
+  ],
+  "all_available": [
+    {
+      "msisdn": "01055288255",
+      "score": 36,
+      "tags": [
+        "palindrome",
+        "three-distinct-digits"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-03",
+      "age_days": 18
+    },
+    {
+      "msisdn": "01055788755",
+      "score": 36,
+      "tags": [
+        "palindrome",
+        "three-distinct-digits"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-03",
+      "age_days": 18
+    },
+    {
+      "msisdn": "01062833339",
+      "score": 30,
+      "tags": [
+        "repeated-digit-x4"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-17",
+      "age_days": 4
+    },
+    {
+      "msisdn": "01055554639",
+      "score": 30,
+      "tags": [
+        "repeated-digit-x4"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-17",
+      "age_days": 4
+    },
+    {
+      "msisdn": "01015988884",
+      "score": 30,
+      "tags": [
+        "repeated-digit-x4"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-17",
+      "age_days": 4
+    },
+    {
+      "msisdn": "01055554736",
+      "score": 30,
+      "tags": [
+        "repeated-digit-x4"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-17",
+      "age_days": 4
+    },
+    {
+      "msisdn": "01055557683",
+      "score": 30,
+      "tags": [
+        "repeated-digit-x4"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-03",
+      "age_days": 18
+    },
+    {
+      "msisdn": "01055558249",
+      "score": 30,
+      "tags": [
+        "repeated-digit-x4"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-03",
+      "age_days": 18
+    },
+    {
+      "msisdn": "01055557924",
+      "score": 30,
+      "tags": [
+        "repeated-digit-x4"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-03",
+      "age_days": 18
+    },
+    {
+      "msisdn": "01044684888",
+      "score": 30,
+      "tags": [
+        "triple-digit",
+        "three-distinct-digits",
+        "ladder-step2-x3"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-17",
+      "age_days": 4
+    },
+    {
+      "msisdn": "01044699443",
+      "score": 29,
+      "tags": [
+        "pair-ladder-partial"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-03",
+      "age_days": 18
+    },
+    {
+      "msisdn": "01044699442",
+      "score": 29,
+      "tags": [
+        "pair-ladder-partial"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-03",
+      "age_days": 18
+    },
+    {
+      "msisdn": "01044699440",
+      "score": 29,
+      "tags": [
+        "pair-ladder-partial"
+      ],
+      "is_new": false,
+      "first_seen": "2026-06-03",
+      "age_days": 18
+    },
+    {
+      "msisdn": "01044577077",
+      "score": 29,
+      "tags": [
+        "pair-ladder-partial"
       ],
       "is_new": false,
       "first_seen": "2026-06-03",
@@ -14133,14 +14121,6 @@
       "is_new": false,
       "first_seen": "2026-06-03",
       "age_days": 18
-    },
-    {
-      "msisdn": "01005574422",
-      "score": 0,
-      "tags": [],
-      "is_new": false,
-      "first_seen": "2026-06-11",
-      "age_days": 10
     },
     {
       "msisdn": "01009987733",
