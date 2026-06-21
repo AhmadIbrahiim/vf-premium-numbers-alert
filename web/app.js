@@ -16,7 +16,11 @@ const state = {
   sort: "grade",
   carrier: "all", // "all" | "vodafone" | "etisalat"
   error: false,
+  renderLimit: 300,
 };
+
+const INITIAL_RENDER_LIMIT = 300;
+const RENDER_STEP = 300;
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -376,6 +380,29 @@ function showEmpty(title, sub) {
   if (sub) e.appendChild(el("p", "mt-1 text-xs text-zinc-500", sub));
 }
 
+function renderCount(total, filtered, rendered = total) {
+  const base = rendered < total
+    ? `${rendered}/${total} number${total === 1 ? "" : "s"}`
+    : `${total} number${total === 1 ? "" : "s"}`;
+  $("count").textContent = base + (filtered ? " · filtered" : "");
+}
+
+function appendLoadMore(parent, remaining) {
+  if (remaining <= 0) return;
+  const wrap = el("div", "mt-3 flex justify-center");
+  const btn = el(
+    "button",
+    "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm transition hover:border-zinc-400 hover:bg-zinc-50 dark:border-white/10 dark:bg-ink-900/70 dark:text-zinc-300 dark:hover:border-white/20 dark:hover:bg-ink-850",
+    `Load ${Math.min(RENDER_STEP, remaining)} more`
+  );
+  btn.addEventListener("click", () => {
+    state.renderLimit += RENDER_STEP;
+    render();
+  });
+  wrap.appendChild(btn);
+  parent.appendChild(wrap);
+}
+
 function renderChanges() {
   const listEl = $("list");
   const podiumEl = $("podium");
@@ -397,7 +424,10 @@ function renderChanges() {
     const newRows = applyFilter(changesRows("new"));
     const goneRows = applyFilter(changesRows("gone"));
     const total = newRows.length + goneRows.length;
-    $("count").textContent = `${total} change${total === 1 ? "" : "s"}` + (filterDigits ? " · filtered" : "");
+    const renderedNew = newRows.slice(0, state.renderLimit);
+    const renderedGone = goneRows.slice(0, Math.max(0, state.renderLimit - renderedNew.length));
+    const renderedTotal = renderedNew.length + renderedGone.length;
+    renderCount(total, Boolean(filterDigits), renderedTotal);
     if (!total) {
       showEmpty("No changes in this snapshot", filterDigits ? "Try a different digit sequence." : "No newly added or gone numbers were detected.");
       return;
@@ -413,14 +443,17 @@ function renderChanges() {
       rows.forEach((r, i) => wrap.appendChild(row(r, i)));
       return wrap;
     };
-    frag.appendChild(makeSection("Newly added", newRows));
-    frag.appendChild(makeSection("Gone", goneRows));
+    frag.appendChild(makeSection("Newly added", renderedNew));
+    frag.appendChild(makeSection("Gone", renderedGone));
     listEl.appendChild(frag);
+    appendLoadMore(listEl, total - renderedTotal);
     return;
   }
 
   // Timeline view: one section per run, most-recent first.
   let totalRows = 0;
+  let renderedRows = 0;
+  let remainingBudget = state.renderLimit;
   const frag = document.createDocumentFragment();
 
   for (const run of timeline) {
@@ -428,26 +461,32 @@ function renderChanges() {
     const goneRows = applyFilter(run.goneMs.map((m) => buildChangeRow(m, "gone")).sort((a, b) => b.grade - a.grade));
     if (!newRows.length && !goneRows.length) continue;
     totalRows += newRows.length + goneRows.length;
+    const shownNew = newRows.slice(0, Math.max(0, remainingBudget));
+    remainingBudget -= shownNew.length;
+    const shownGone = goneRows.slice(0, Math.max(0, remainingBudget));
+    remainingBudget -= shownGone.length;
+    if (!shownNew.length && !shownGone.length) continue;
+    renderedRows += shownNew.length + shownGone.length;
 
     const runEl = el("div", "space-y-3 border-t border-zinc-100 pt-4 first:border-0 first:pt-0 dark:border-white/5");
 
     // Run header with timestamp + count badges
     const header = el("div", "flex flex-wrap items-center gap-2");
     header.appendChild(el("span", "text-xs font-semibold text-zinc-400 dark:text-zinc-500", relTime(run.ts)));
-    if (newRows.length) header.appendChild(el("span", "rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-300", `+${newRows.length} new`));
-    if (goneRows.length) header.appendChild(el("span", "rounded-md bg-zinc-400/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500 ring-1 ring-zinc-400/30 dark:text-zinc-400", `-${goneRows.length} gone`));
+    if (shownNew.length) header.appendChild(el("span", "rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-300", `+${shownNew.length} new`));
+    if (shownGone.length) header.appendChild(el("span", "rounded-md bg-zinc-400/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500 ring-1 ring-zinc-400/30 dark:text-zinc-400", `-${shownGone.length} gone`));
     runEl.appendChild(header);
 
-    if (newRows.length) {
+    if (shownNew.length) {
       const sec = el("section", "space-y-2");
-      sec.appendChild(el("h3", "text-xs font-medium uppercase tracking-wide text-emerald-600/70 dark:text-emerald-400/70", `Newly added (${newRows.length})`));
-      newRows.forEach((r, i) => sec.appendChild(row(r, i)));
+      sec.appendChild(el("h3", "text-xs font-medium uppercase tracking-wide text-emerald-600/70 dark:text-emerald-400/70", `Newly added (${shownNew.length})`));
+      shownNew.forEach((r, i) => sec.appendChild(row(r, i)));
       runEl.appendChild(sec);
     }
-    if (goneRows.length) {
+    if (shownGone.length) {
       const sec = el("section", "space-y-2");
-      sec.appendChild(el("h3", "text-xs font-medium uppercase tracking-wide text-zinc-400/70 dark:text-zinc-500/70", `Gone (${goneRows.length})`));
-      goneRows.forEach((r, i) => sec.appendChild(row(r, i)));
+      sec.appendChild(el("h3", "text-xs font-medium uppercase tracking-wide text-zinc-400/70 dark:text-zinc-500/70", `Gone (${shownGone.length})`));
+      shownGone.forEach((r, i) => sec.appendChild(row(r, i)));
       runEl.appendChild(sec);
     }
 
@@ -460,8 +499,9 @@ function renderChanges() {
     return;
   }
 
-  $("count").textContent = `${totalRows} number${totalRows === 1 ? "" : "s"} changed` + (filterDigits ? " · filtered" : "");
+  renderCount(totalRows, Boolean(filterDigits), renderedRows);
   listEl.appendChild(frag);
+  appendLoadMore(listEl, totalRows - renderedRows);
 }
 
 function render() {
@@ -475,33 +515,36 @@ function render() {
 
   const rows = currentRows();
   const filtered = Boolean(state.filter.replace(/\D/g, ""));
-  $("count").textContent = `${rows.length} number${rows.length === 1 ? "" : "s"}` + (filtered ? " · filtered" : "");
+  const visibleRows = rows.slice(0, state.renderLimit);
+  renderCount(rows.length, filtered, visibleRows.length);
 
   if (rows.length === 0) { showEmpty("No matches", filtered ? "Try a different digit sequence." : "Nothing to show yet."); return; }
 
   // Podium for the top 3 when not filtering; the list holds the remainder.
-  const usePodium = !filtered && rows.length >= 3;
+  const usePodium = !filtered && visibleRows.length >= 3;
   podiumEl.innerHTML = "";
   if (usePodium) {
     podiumEl.className = "mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end";
     const frag = document.createDocumentFragment();
-    rows.slice(0, 3).forEach((r, i) => frag.appendChild(podiumCard(r, i)));
+    visibleRows.slice(0, 3).forEach((r, i) => frag.appendChild(podiumCard(r, i)));
     podiumEl.appendChild(frag);
   } else {
     podiumEl.classList.add("hidden");
   }
 
-  const rest = usePodium ? rows.slice(3) : rows;
+  const rest = usePodium ? visibleRows.slice(3) : visibleRows;
   listEl.innerHTML = "";
   const frag = document.createDocumentFragment();
   rest.forEach((r, idx) => frag.appendChild(row(r, usePodium ? idx + 3 : idx)));
   listEl.appendChild(frag);
+  appendLoadMore(listEl, rows.length - visibleRows.length);
 }
 
 /* ----------------------------- controls ----------------------------- */
 
 function setView(v) {
   state.view = v;
+  state.renderLimit = INITIAL_RENDER_LIMIT;
   const now = v === "now";
   const ever = v === "ever";
   const changes = v === "changes";
@@ -526,9 +569,9 @@ function wire() {
   $("tab-now").addEventListener("click", () => setView("now"));
   $("tab-ever").addEventListener("click", () => setView("ever"));
   $("tab-changes").addEventListener("click", () => setView("changes"));
-  $("filter").addEventListener("input", (e) => { state.filter = e.target.value; render(); });
-  $("sort").addEventListener("change", (e) => { state.sort = e.target.value; render(); });
-  $("carrier").addEventListener("change", (e) => { state.carrier = e.target.value; render(); });
+  $("filter").addEventListener("input", (e) => { state.filter = e.target.value; state.renderLimit = INITIAL_RENDER_LIMIT; render(); });
+  $("sort").addEventListener("change", (e) => { state.sort = e.target.value; state.renderLimit = INITIAL_RENDER_LIMIT; render(); });
+  $("carrier").addEventListener("change", (e) => { state.carrier = e.target.value; state.renderLimit = INITIAL_RENDER_LIMIT; render(); });
   $("theme").addEventListener("click", toggleTheme);
   setView("now");
   skeleton();
