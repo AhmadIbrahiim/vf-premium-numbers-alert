@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ETISALAT_POOLS, tierBonus } from "../src/config.js";
+import {
+  ETISALAT_POOLS, tierBonus,
+  weGradeSlug, WE_GRADE_MIN, WE_GRADE_MAX, WE_PAGE_SIZE, WE_MAX_PAGES,
+} from "../src/config.js";
 
 test("ETISALAT_POOLS maps the five pools to tiers and bonuses", () => {
   assert.deepEqual(
@@ -25,4 +28,17 @@ test("tierBonus is 0 for unknown or empty tier", () => {
   assert.equal(tierBonus(""), 0);
   assert.equal(tierBonus("gold"), 0);
   assert.equal(tierBonus(undefined), 0);
+});
+
+test("weGradeSlug zero-pads to GRADE_0NN", () => {
+  assert.equal(weGradeSlug(1), "GRADE_001");
+  assert.equal(weGradeSlug(17), "GRADE_017");
+  assert.equal(weGradeSlug(30), "GRADE_030");
+});
+
+test("WE grade bounds are valid positive integers (env-independent)", () => {
+  for (const v of [WE_GRADE_MIN, WE_GRADE_MAX, WE_PAGE_SIZE, WE_MAX_PAGES]) {
+    assert.ok(Number.isInteger(v) && v >= 1, `expected positive integer, got ${v}`);
+  }
+  assert.ok(WE_GRADE_MIN <= WE_GRADE_MAX, "WE_GRADE_MIN must be <= WE_GRADE_MAX");
 });

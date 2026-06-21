@@ -28,6 +28,7 @@ function simLabel(simType) {
 /** Human label for the carrier. */
 function carrierLabel(carrier) {
   if (carrier === "etisalat") return "Etisalat";
+  if (carrier === "we") return "WE";
   if (carrier === "vodafone") return "Vodafone";
   return "—";
 }

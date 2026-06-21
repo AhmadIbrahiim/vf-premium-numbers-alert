@@ -15,3 +15,14 @@ test("buildIssueBody includes a Carrier column and per-row carrier label", () =>
   assert.match(body, /Etisalat/);
   assert.match(body, /Vodafone/);
 });
+
+test("buildIssueBody renders WE carrier label", () => {
+  const body = buildIssueBody({
+    newPremium: [
+      { msisdn: "01555027138", grade: 95, reason: "555 repeat", sim_type: "", carrier: "we", tags: [] },
+    ],
+    generatedAt: "2026-06-21T00:00:00Z",
+    repo: "owner/name",
+  });
+  assert.match(body, /\bWE\b/);
+});
