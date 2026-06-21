@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile, appendFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { fetchCatalog } from "./fetch.js";
+import { fetchAll } from "./fetch.js";
 import { scoreMsisdn } from "./score.js";
 import { computeDiff } from "./diff.js";
 import { gradeCandidates } from "./grade.js";
@@ -14,7 +14,7 @@ import { notify } from "./notify.js";
 import {
   DATA_DIR, MODEL, GITHUB_TOKEN, REPO,
   CANDIDATE_COUNT, BEST_COUNT, ALERT_THRESHOLD,
-  todayInTz,
+  todayInTz, tierBonus,
 } from "./config.js";
 
 /** Stable signature of the *meaningful* state, so we only commit on real change. */
@@ -46,7 +46,7 @@ export async function run({ fetchImpl } = {}) {
   // 1. fetch (skip the run on failure — never overwrite good data)
   let catalog;
   try {
-    catalog = await fetchCatalog({ fetchImpl });
+    catalog = await fetchAll({ fetchImpl });
   } catch (err) {
     await summary(`⚠️ fetch failed, skipping run: ${err.message}`);
     await emitOutput("changed", "false");
@@ -58,12 +58,20 @@ export async function run({ fetchImpl } = {}) {
     await summary(`⚠️ truncation: returned ${returned} < totalElements ${totalElements}. Increase size=.`);
   }
 
-  // 2. score + available set
+  // 2. score (+ Etisalat tier bonus) + available set
   const scoreMap = new Map();
-  const simTypeMap = new Map(); // msisdn -> "ESIM" | "PHYSICAL" (line source)
+  const simTypeMap = new Map(); // msisdn -> "ESIM" | "PHYSICAL" (Vodafone line source)
+  const carrierMap = new Map(); // msisdn -> "vodafone" | "etisalat"
+  const tierMap = new Map();    // msisdn -> Etisalat tier slug ("" for Vodafone)
   for (const r of records) {
-    scoreMap.set(r.msisdn, scoreMsisdn(r.msisdn));
+    const base = scoreMsisdn(r.msisdn);
+    const tier = r.tier || "";
+    const bonus = tier ? tierBonus(tier) : 0;
+    const tags = bonus ? [...base.tags, `etisalat-${tier}`] : base.tags;
+    scoreMap.set(r.msisdn, { score: Math.min(100, base.score + bonus), tags });
     simTypeMap.set(r.msisdn, r.simType);
+    carrierMap.set(r.msisdn, r.carrier || "vodafone");
+    tierMap.set(r.msisdn, tier);
   }
   const available = records.filter((r) => r.available).map((r) => r.msisdn);
 
@@ -105,11 +113,11 @@ export async function run({ fetchImpl } = {}) {
   const gradeMap = new Map(bestThirty.map((c) => [c.msisdn, c.grade]));
 
   // 5. persist
-  const nextHistory = updateHistory({ history, available, scoreMap, gradeMap, simTypeMap, today });
+  const nextHistory = updateHistory({ history, available, scoreMap, gradeMap, simTypeMap, carrierMap, tierMap, today });
   const diffWithSet = { ...diff, newSet: new Set(diff.isBaseline ? [] : diff.newMsisdns) };
   const latest = buildLatest({
     total: totalElements, bestThirty, history: nextHistory, diff: diffWithSet, today, generatedAt,
-    available, scoreMap, simTypeMap,
+    available, scoreMap, simTypeMap, carrierMap, tierMap,
   });
   const nextEvents = appendEvents(events, { today, generatedAt, diff: diffWithSet });
   await writeState(DATA_DIR, { history: nextHistory, latest, events: nextEvents });
