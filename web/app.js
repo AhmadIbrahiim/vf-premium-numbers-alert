@@ -127,7 +127,7 @@ function carrierBadges(parent, row) {
       parent.appendChild(el("span", "rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-300", TIER_LABEL[row.tier]));
     }
   } else {
-    parent.appendChild(el("span", "rounded-md bg-vf-red/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-vf-red ring-1 ring-vf-red/30", "Vodafone"));
+    parent.appendChild(el("span", "rounded-md bg-vf-red/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-vf-red ring-1 ring-vf-red/30 dark:text-red-300", "Vodafone"));
     if (row.sim_type === "ESIM") parent.appendChild(el("span", "rounded-md bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-500/30 dark:text-indigo-300", "eSIM"));
     else if (row.sim_type === "PHYSICAL") parent.appendChild(el("span", "rounded-md bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-700 ring-1 ring-sky-500/30 dark:text-sky-300", "Physical"));
   }
@@ -178,6 +178,8 @@ function bestEver() {
       reason: e.status === "gone" ? "no longer available" : "currently available",
       tags: e.tags || [],
       sim_type: e.sim_type || "",
+      carrier: e.carrier || "",
+      tier: e.tier || "",
       is_new: false,
       first_seen: e.first_seen || "",
       age_days: 0,
@@ -228,6 +230,8 @@ function buildChangeRow(msisdn, type) {
     reason: fromBest?.reason || (type === "new" ? "newly added" : "no longer available"),
     tags: fromBest?.tags || h.tags || [],
     sim_type: fromBest?.sim_type || h.sim_type || "",
+    carrier: fromBest?.carrier || h.carrier || "",
+    tier: fromBest?.tier || h.tier || "",
     is_new: type === "new",
     status: type === "gone" ? "gone" : "available",
     age_days: fromBest?.age_days ?? 0,
