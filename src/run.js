@@ -67,7 +67,9 @@ export async function run({ fetchImpl } = {}) {
     const base = scoreMsisdn(r.msisdn);
     const tier = r.tier || "";
     const bonus = tier ? tierBonus(tier) : 0;
-    const tags = bonus ? [...base.tags, `etisalat-${tier}`] : base.tags;
+    // Tag every Etisalat number with its tier (even silver, whose bonus is 0) so
+    // the operator tier reaches the LLM candidate payload and the tag pills.
+    const tags = tier ? [...base.tags, `etisalat-${tier}`] : base.tags;
     scoreMap.set(r.msisdn, { score: Math.min(100, base.score + bonus), tags });
     simTypeMap.set(r.msisdn, r.simType);
     carrierMap.set(r.msisdn, r.carrier || "vodafone");
