@@ -135,14 +135,23 @@ test("fetchWe throws on persistent HTTP failure", async () => {
   await assert.rejects(() => fetchWe({ fetchImpl, retries: 0, gradeMin: 17, gradeMax: 17 }));
 });
 
-test("fetchWe fails closed when a grade exceeds WE_MAX_PAGES (every page full)", async () => {
-  // Always return a full page -> never hits the short-page break -> exceeds the page cap.
+test("fetchWe samples (does not throw) when a grade exceeds WE_MAX_PAGES", async () => {
+  // Same full page every call -> never a short page -> hits the cap. Best-effort: no throw,
+  // returns what was sampled (WE inventory is large + stable numeric order, so a cap is fine).
   const full = Array.from({ length: WE_PAGE_SIZE }, (_, i) => 1500000000 + i);
   const fetchImpl = async () => ({
     ok: true, status: 200,
     json: async () => ({ header: { retCode: "0" }, body: { telnumlist: full.map((t) => ({ telnum: t })) } }),
   });
-  await assert.rejects(() => fetchWe({ fetchImpl, gradeMin: 17, gradeMax: 17 }), /WE_MAX_PAGES/);
+  const origWarn = console.warn;
+  console.warn = () => {}; // suppress the expected "sampled first N pages" notice (pristine output)
+  try {
+    const { records } = await fetchWe({ fetchImpl, gradeMin: 17, gradeMax: 17 });
+    assert.equal(records.length, WE_PAGE_SIZE); // same page repeated -> deduped to one page
+    assert.ok(records.every((r) => r.tier === "GRADE_017"));
+  } finally {
+    console.warn = origWarn;
+  }
 });
 
 /** Route a single fake fetch to VF, Etisalat, or WE by URL. */

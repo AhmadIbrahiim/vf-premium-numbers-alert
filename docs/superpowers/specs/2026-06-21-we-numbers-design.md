@@ -84,11 +84,18 @@ inferred from the `010`/`011`/`015` prefix; fallbacks in store/dashboard).
 - **`src/fetch.js`** — shared `fetchJsonWithRetry` extended to POST+body and corrected to
   **truly fail-fast on non-429 4xx** (previously the throw was caught and retried); new
   `fetchWe` (grade enumeration + pagination, dedupe first-grade-wins, fail-closed on
-  `retCode != "0"` and on exceeding `WE_MAX_PAGES` with full pages); `fetchAll` now merges
-  all three carriers.
+  `retCode != "0"`); `fetchAll` now merges all three carriers.
+  - **WE inventory is large and returned in a STABLE ascending numeric order.** Each grade is
+    paged to a best-effort cap (`WE_MAX_PAGES`, default 20 → ~1020/grade); reaching the cap is
+    expected *sampling*, not unknown truncation (the first N pages are the same set each run,
+    so no false "gone" churn), and is logged — not thrown. Raise `WE_MAX_PAGES` to pull deeper.
+    Whole-run abort is reserved for genuine auth/transport failures (`retCode != "0"`).
 - **`src/run.js`** — tier bonus/LLM-tag are **Etisalat-only** (carrier-aware): WE numbers get
   no bonus and no `etisalat-` tag. The commit-gating signature now includes `tier` so a
   metadata-only change still triggers a commit.
+- **Re-evaluate on demand** — `REGRADE=1` (env, or the `regrade` input on the manual
+  "Run workflow" dispatch) bypasses the LLM grade cache and re-grades every candidate. Breadth
+  is governed by `CANDIDATE_COUNT` (env, default 150).
 - **`src/store.js`** — carrier/tier resolution uses key-presence checks (not `||`) so an
   explicit empty value isn't masked by stale history.
 - **`src/notify.js`** — `carrierLabel` adds `we → "WE"`.
