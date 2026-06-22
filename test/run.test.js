@@ -77,3 +77,40 @@ test("run merges all three carriers into latest.json/history.json; WE gets no bo
     prev.gmax === undefined ? delete process.env.WE_GRADE_MAX : (process.env.WE_GRADE_MAX = prev.gmax);
   }
 });
+
+test("REGRADE=1 forces re-evaluation even when the grade cache is valid", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vf-regrade-"));
+  const prev = {
+    d: process.env.DATA_DIR, t: process.env.GITHUB_TOKEN, r: process.env.GITHUB_REPOSITORY,
+    gmin: process.env.WE_GRADE_MIN, gmax: process.env.WE_GRADE_MAX, rg: process.env.REGRADE,
+  };
+  process.env.DATA_DIR = dir;
+  delete process.env.GITHUB_TOKEN;
+  delete process.env.GITHUB_REPOSITORY;
+  process.env.WE_GRADE_MIN = "17";
+  process.env.WE_GRADE_MAX = "17";
+  delete process.env.REGRADE;
+  const { run } = await import("../src/run.js?regrade-test=" + Date.now());
+  const fetchImpl = routedFetch({
+    vf: { content: [{ id: "1", msisdn: "01055455833", available: true, defaultPrice: { amount: 5 }, simType: "ESIM", tariffs: [] }], totalElements: 1 },
+    etByPool: {},
+    weByGrade: { GRADE_017: [[1555027138]] },
+  });
+  try {
+    const r1 = await run({ fetchImpl });
+    assert.equal(r1.regraded, true, "first run grades (cache empty)");
+    const r2 = await run({ fetchImpl });
+    assert.equal(r2.regraded, false, "second run reuses the cache");
+    process.env.REGRADE = "1"; // read at call time inside run()
+    const r3 = await run({ fetchImpl });
+    assert.equal(r3.regraded, true, "REGRADE=1 bypasses the cache");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+    prev.d === undefined ? delete process.env.DATA_DIR : (process.env.DATA_DIR = prev.d);
+    if (prev.t !== undefined) process.env.GITHUB_TOKEN = prev.t;
+    if (prev.r !== undefined) process.env.GITHUB_REPOSITORY = prev.r;
+    prev.gmin === undefined ? delete process.env.WE_GRADE_MIN : (process.env.WE_GRADE_MIN = prev.gmin);
+    prev.gmax === undefined ? delete process.env.WE_GRADE_MAX : (process.env.WE_GRADE_MAX = prev.gmax);
+    prev.rg === undefined ? delete process.env.REGRADE : (process.env.REGRADE = prev.rg);
+  }
+});

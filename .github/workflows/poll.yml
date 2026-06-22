@@ -7,7 +7,12 @@ on:
   push:
     branches: [main]
     paths: ["web/**", "src/**", ".github/workflows/poll.yml"]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      regrade:
+        description: "Re-evaluate ALL numbers (bypass the LLM grade cache)"
+        type: boolean
+        default: false
 
 # Never let two runs race the gh-pages push.
 concurrency:
@@ -53,6 +58,8 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           DATA_DIR: public
           MODEL: openai/gpt-4o-mini
+          # Manual "Run workflow" with regrade=true forces a full re-evaluation.
+          REGRADE: ${{ github.event.inputs.regrade == 'true' && '1' || '0' }}
         run: node src/run.js
 
       - name: Copy dashboard into public/

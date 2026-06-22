@@ -227,11 +227,14 @@ function weHeaders() {
 
 /**
  * Fetch WE premium numbers across all inventory grades. For each grade GRADE_min..max,
- * page through results (all-wildcard pattern) until a short/empty page. Maps each telnum
- * (integer, no leading 0) to an msisdn. Dedupes by msisdn (first grade wins). Throws on a
- * rejected query (retCode != "0"), a transport failure, or if a grade exceeds WE_MAX_PAGES
- * while still returning full pages — so the caller skips the run rather than treat truncated
- * inventory as complete (which would surface missed numbers as false disappearances).
+ * page through results (all-wildcard pattern) until a short/empty page or the WE_MAX_PAGES
+ * cap. Maps each telnum (integer, no leading 0) to an msisdn. Dedupes by msisdn (first grade
+ * wins). Throws on a rejected query (retCode != "0") or transport failure.
+ *
+ * WE grades can hold many thousands of numbers, returned in a STABLE ascending numeric order.
+ * Hitting WE_MAX_PAGES is therefore expected sampling, not unknown truncation: the first N
+ * pages are the same set run-to-run, so a cap does not cause false "gone" churn. We log the
+ * capped grades (raise WE_MAX_PAGES to pull deeper) rather than failing the whole run.
  *
  * @param {object} [opts] - { fetchImpl, retries=4, baseDelayMs=1000, timeoutMs=45000, gradeMin, gradeMax }
  * @returns {Promise<{ records: Record[], totalElements: number, returned: number }>}
@@ -246,6 +249,7 @@ export async function fetchWe(opts = {}) {
 
   const byMsisdn = new Map(); // msisdn -> grade slug (first grade wins)
   let returned = 0;
+  const cappedGrades = [];
 
   for (let g = gradeMin; g <= gradeMax; g++) {
     const grade = weGradeSlug(g);
@@ -273,11 +277,14 @@ export async function fetchWe(opts = {}) {
       }
       if (list.length < WE_PAGE_SIZE) { exhausted = true; break; } // last page for this grade
     }
-    // Fail closed: a grade still returning full pages at the cap means we'd be reporting
-    // partial inventory as the complete available set.
-    if (!exhausted) {
-      throw new Error(`fetchWe ${grade} exceeded WE_MAX_PAGES — inventory may be truncated`);
-    }
+    // Best-effort: a grade still full at the cap is sampled (stable numeric order), not failed.
+    if (!exhausted) cappedGrades.push(grade);
+  }
+  if (cappedGrades.length) {
+    console.warn(
+      `[fetchWe] sampled first ${WE_MAX_PAGES} pages for ${cappedGrades.join(", ")} ` +
+      `(inventory exceeds the cap; raise WE_MAX_PAGES to pull deeper)`
+    );
   }
 
   const records = [...byMsisdn.entries()].map(([msisdn, grade]) => ({

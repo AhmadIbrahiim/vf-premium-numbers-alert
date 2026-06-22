@@ -101,9 +101,12 @@ export async function run({ fetchImpl } = {}) {
     count: CANDIDATE_COUNT,
   });
   const candSig = candidateSignature(candidates);
+  // REGRADE=1 forces a fresh LLM evaluation of every candidate, ignoring the grade cache —
+  // use it to re-evaluate all numbers after a scorer/prompt change or on demand.
+  const forceRegrade = process.env.REGRADE === "1" || process.env.REGRADE === "true";
   const prevGrades = await readGrades(DATA_DIR);
   let graded, regraded;
-  if (gradeCacheValid(prevGrades, candSig)) {
+  if (!forceRegrade && gradeCacheValid(prevGrades, candSig)) {
     graded = prevGrades.graded;
     regraded = false;
   } else {
@@ -148,7 +151,7 @@ export async function run({ fetchImpl } = {}) {
     `baseline=${diff.isBaseline} llm=${regraded ? "graded" : "cached"} ` +
     `alerts=${newPremium.length} (${notifyResult}) changed=${changed}`
   );
-  return { changed, diff, newPremium, notifyResult };
+  return { changed, diff, newPremium, notifyResult, regraded };
 }
 
 // Run when invoked directly (node src/run.js)
