@@ -1,89 +1,103 @@
 {
-  "generated_at": "2026-08-21T15:17:09.914Z",
-  "total": 11401,
-  "new_count": 36,
-  "disappeared_count": 42,
+  "generated_at": "2026-08-21T15:52:15.612Z",
+  "total": 11387,
+  "new_count": 39,
+  "disappeared_count": 53,
   "new_msisdns": [
-    "01101034948",
-    "01101034950",
-    "01101355778",
-    "01101355885",
-    "01101238527",
-    "01101238528",
-    "01101238529",
-    "01101235710",
-    "01101235717",
-    "01101235720",
-    "01101235730",
-    "01101235756",
-    "01101235758",
-    "01101235765",
-    "01501013920",
-    "01503018206",
-    "01503021935",
-    "01503021944",
-    "01503022368",
-    "01503022438",
-    "01500113296",
-    "01500311384",
-    "01501021746",
-    "01503014398",
-    "01515697935",
-    "01515698395",
-    "01515698903",
-    "01515699458",
-    "01500107076",
-    "01555643273",
-    "01555908047",
-    "01555908506",
-    "01555908791",
-    "01555909859",
-    "01555910470",
-    "01555911682"
-  ],
-  "disappeared_msisdns": [
-    "01101029379",
-    "01101029504",
-    "01101029721",
-    "01101029895",
-    "01101030573",
-    "01101031870",
-    "01101068069",
-    "01101231754",
+    "01101028568",
+    "01101034951",
+    "01101034953",
+    "01101034954",
+    "01101034960",
+    "01101077355",
+    "01101077492",
+    "01101077522",
+    "01101180720",
+    "01503023871",
+    "01503024936",
+    "01503025166",
+    "01503026067",
+    "01503026480",
+    "01503027650",
+    "01503027872",
     "01558385011",
     "01558385033",
-    "01558385044",
+    "01558385077",
     "01500104836",
     "01500113298",
-    "01559722258",
-    "01101231857",
-    "01558385077",
-    "01503327532",
-    "01555397851",
-    "01555569916",
-    "01555647029",
     "01501043629",
     "01501047282",
     "01501049365",
-    "01501172375",
+    "01503327532",
+    "01515716243",
+    "01501018110",
+    "01501018210",
+    "01501019710",
+    "01501032031",
+    "01559722258",
+    "01500444495",
+    "01555397851",
+    "01555647029",
     "01500037453",
-    "01500052371",
-    "01500071948",
     "01500089548",
-    "01101077355",
-    "01101077492",
     "01555234824",
     "01555471571",
-    "01501033523",
-    "01501056159",
-    "01501057855",
-    "01500402502",
-    "01501571379",
-    "01599992722",
-    "01599992822",
-    "01501935569",
-    "01501943437",
-    "01515690646"
+    "01555911800"
+  ],
+  "disappeared_msisdns": [
+    "01101031542",
+    "01101031781",
+    "01101031930",
+    "01101032719",
+    "01500228943",
+    "01555748135",
+    "01555524636",
+    "01555347259",
+    "01555619364",
+    "01555642796",
+    "01501021746",
+    "01501048637",
+    "01501302586",
+    "01503447598",
+    "01101355677",
+    "01101355773",
+    "01101355775",
+    "01101355778",
+    "01101355885",
+    "01500045894",
+    "01500062591",
+    "01101238526",
+    "01555682957",
+    "01101235717",
+    "01101238527",
+    "01101238528",
+    "01101238529",
+    "01101235720",
+    "01101235730",
+    "01101235756",
+    "01505948522",
+    "01101235758",
+    "01101235765",
+    "01555923658",
+    "01555839210",
+    "01555923743",
+    "01555923753",
+    "01555923769",
+    "01555861258",
+    "01501012783",
+    "01501013297",
+    "01501013427",
+    "01555948657",
+    "01555948729",
+    "01501635508",
+    "01501082488",
+    "01501097941",
+    "01500223021",
+    "01500510955",
+    "01500696393",
+    "01500820830",
+    "01501691036",
+    "01500311384"
   ],
   "best_thirty": [
     {
@@ -3357,6 +3371,19 @@
       "is_new": false,
       "first_seen": "2026-08-20",
       "age_days": 1
+    },
+    {
+      "msisdn": "01500444495",
+      "score": 34,
+      "tags": [
+        "repeated-digit-x4"
+      ],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_015",
+      "is_new": true,
+      "first_seen": "2026-06-25",
+      "age_days": 57
     },
     {
       "msisdn": "01599992189",
@@ -15870,93 +15897,9 @@
       "sim_type": "",
       "carrier": "etisalat",
       "tier": "platinum_plus",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-07-29",
       "age_days": 23
-    },
-    {
-      "msisdn": "01101235717",
-      "score": 30,
-      "tags": [
-        "ascending-run-x4",
-        "etisalat-platinum_plus"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "platinum_plus",
-      "is_new": true,
-      "first_seen": "2026-07-29",
-      "age_days": 23
-    },
-    {
-      "msisdn": "01101235720",
-      "score": 30,
-      "tags": [
-        "ascending-run-x4",
-        "etisalat-platinum_plus"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "platinum_plus",
-      "is_new": true,
-      "first_seen": "2026-07-30",
-      "age_days": 22
-    },
-    {
-      "msisdn": "01101235730",
-      "score": 30,
-      "tags": [
-        "ascending-run-x4",
-        "etisalat-platinum_plus"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "platinum_plus",
-      "is_new": true,
-      "first_seen": "2026-07-30",
-      "age_days": 22
-    },
-    {
-      "msisdn": "01101235756",
-      "score": 30,
-      "tags": [
-        "ascending-run-x4",
-        "etisalat-platinum_plus"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "platinum_plus",
-      "is_new": true,
-      "first_seen": "2026-07-31",
-      "age_days": 21
-    },
-    {
-      "msisdn": "01101235758",
-      "score": 30,
-      "tags": [
-        "ascending-run-x4",
-        "etisalat-platinum_plus"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "platinum_plus",
-      "is_new": true,
-      "first_seen": "2026-07-31",
-      "age_days": 21
-    },
-    {
-      "msisdn": "01101235765",
-      "score": 30,
-      "tags": [
-        "ascending-run-x4",
-        "etisalat-platinum_plus"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "platinum_plus",
-      "is_new": true,
-      "first_seen": "2026-08-01",
-      "age_days": 20
     },
     {
       "msisdn": "01501024672",
@@ -31230,62 +31173,6 @@
       "age_days": 24
     },
     {
-      "msisdn": "01101238526",
-      "score": 26,
-      "tags": [
-        "ascending-run-x4",
-        "etisalat-platinum"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "platinum",
-      "is_new": false,
-      "first_seen": "2026-07-28",
-      "age_days": 24
-    },
-    {
-      "msisdn": "01101238527",
-      "score": 26,
-      "tags": [
-        "ascending-run-x4",
-        "etisalat-platinum"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "platinum",
-      "is_new": true,
-      "first_seen": "2026-07-30",
-      "age_days": 22
-    },
-    {
-      "msisdn": "01101238528",
-      "score": 26,
-      "tags": [
-        "ascending-run-x4",
-        "etisalat-platinum"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "platinum",
-      "is_new": true,
-      "first_seen": "2026-07-30",
-      "age_days": 22
-    },
-    {
-      "msisdn": "01101238529",
-      "score": 26,
-      "tags": [
-        "ascending-run-x4",
-        "etisalat-platinum"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "platinum",
-      "is_new": true,
-      "first_seen": "2026-07-30",
-      "age_days": 22
-    },
-    {
       "msisdn": "01101190420",
       "score": 26,
       "tags": [
@@ -33350,76 +33237,6 @@
       "age_days": 25
     },
     {
-      "msisdn": "01101355677",
-      "score": 18,
-      "tags": [
-        "ladder-step2-x3",
-        "etisalat-golden_plus"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "golden_plus",
-      "is_new": false,
-      "first_seen": "2026-07-27",
-      "age_days": 25
-    },
-    {
-      "msisdn": "01101355773",
-      "score": 18,
-      "tags": [
-        "ladder-step2-x3",
-        "etisalat-golden_plus"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "golden_plus",
-      "is_new": false,
-      "first_seen": "2026-07-27",
-      "age_days": 25
-    },
-    {
-      "msisdn": "01101355775",
-      "score": 18,
-      "tags": [
-        "ladder-step2-x3",
-        "etisalat-golden_plus"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "golden_plus",
-      "is_new": false,
-      "first_seen": "2026-07-27",
-      "age_days": 25
-    },
-    {
-      "msisdn": "01101355778",
-      "score": 18,
-      "tags": [
-        "ladder-step2-x3",
-        "etisalat-golden_plus"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "golden_plus",
-      "is_new": true,
-      "first_seen": "2026-07-28",
-      "age_days": 24
-    },
-    {
-      "msisdn": "01101355885",
-      "score": 18,
-      "tags": [
-        "ladder-step2-x3",
-        "etisalat-golden_plus"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "golden_plus",
-      "is_new": true,
-      "first_seen": "2026-07-28",
-      "age_days": 24
-    },
-    {
       "msisdn": "01500303660",
       "score": 18,
       "tags": [
@@ -33527,6 +33344,19 @@
       "is_new": false,
       "first_seen": "2026-06-24",
       "age_days": 58
+    },
+    {
+      "msisdn": "01101180720",
+      "score": 16,
+      "tags": [
+        "etisalat-platinum_plus"
+      ],
+      "sim_type": "",
+      "carrier": "etisalat",
+      "tier": "platinum_plus",
+      "is_new": true,
+      "first_seen": "2026-06-21",
+      "age_days": 61
     },
     {
       "msisdn": "01101180920",
@@ -36250,19 +36080,6 @@
       "score": 14,
       "tags": [
         "ladder-step-2-x3"
-      ],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_012",
-      "is_new": false,
-      "first_seen": "2026-08-15",
-      "age_days": 6
-    },
-    {
-      "msisdn": "01500696393",
-      "score": 14,
-      "tags": [
-        "ladder-step-3-x3"
       ],
       "sim_type": "",
       "carrier": "we",
@@ -40835,6 +40652,19 @@
       "age_days": 60
     },
     {
+      "msisdn": "01559722258",
+      "score": 12,
+      "tags": [
+        "triple-digit"
+      ],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_013",
+      "is_new": true,
+      "first_seen": "2026-06-22",
+      "age_days": 60
+    },
+    {
       "msisdn": "01559769222",
       "score": 12,
       "tags": [
@@ -40846,6 +40676,19 @@
       "is_new": false,
       "first_seen": "2026-06-22",
       "age_days": 60
+    },
+    {
+      "msisdn": "01500037453",
+      "score": 12,
+      "tags": [
+        "triple-digit"
+      ],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_018",
+      "is_new": true,
+      "first_seen": "2026-07-28",
+      "age_days": 24
     },
     {
       "msisdn": "01500038467",
@@ -40952,19 +40795,6 @@
       "age_days": 24
     },
     {
-      "msisdn": "01500045894",
-      "score": 12,
-      "tags": [
-        "triple-digit"
-      ],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_018",
-      "is_new": false,
-      "first_seen": "2026-07-28",
-      "age_days": 24
-    },
-    {
       "msisdn": "01500049584",
       "score": 12,
       "tags": [
@@ -41057,19 +40887,6 @@
     },
     {
       "msisdn": "01500061793",
-      "score": 12,
-      "tags": [
-        "triple-digit"
-      ],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_018",
-      "is_new": false,
-      "first_seen": "2026-07-28",
-      "age_days": 24
-    },
-    {
-      "msisdn": "01500062591",
       "score": 12,
       "tags": [
         "triple-digit"
@@ -41290,6 +41107,19 @@
       "age_days": 24
     },
     {
+      "msisdn": "01500089548",
+      "score": 12,
+      "tags": [
+        "triple-digit"
+      ],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_018",
+      "is_new": true,
+      "first_seen": "2026-07-28",
+      "age_days": 24
+    },
+    {
       "msisdn": "01500089658",
       "score": 12,
       "tags": [
@@ -41421,19 +41251,6 @@
     },
     {
       "msisdn": "01555524635",
-      "score": 12,
-      "tags": [
-        "triple-digit"
-      ],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_019",
-      "is_new": false,
-      "first_seen": "2026-06-22",
-      "age_days": 60
-    },
-    {
-      "msisdn": "01555524636",
       "score": 12,
       "tags": [
         "triple-digit"
@@ -43436,6 +43253,20 @@
       "age_days": 21
     },
     {
+      "msisdn": "01101034951",
+      "score": 10,
+      "tags": [
+        "ladder-step-4-x3",
+        "etisalat-silver"
+      ],
+      "sim_type": "",
+      "carrier": "etisalat",
+      "tier": "silver",
+      "is_new": true,
+      "first_seen": "2026-08-21",
+      "age_days": 0
+    },
+    {
       "msisdn": "01501013592",
       "score": 10,
       "tags": [
@@ -44957,19 +44788,6 @@
       "age_days": 3
     },
     {
-      "msisdn": "01501691036",
-      "score": 10,
-      "tags": [
-        "ladder-step3-x3"
-      ],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_006",
-      "is_new": false,
-      "first_seen": "2026-08-18",
-      "age_days": 3
-    },
-    {
       "msisdn": "01501748135",
       "score": 10,
       "tags": [
@@ -45334,6 +45152,19 @@
       "age_days": 0
     },
     {
+      "msisdn": "01503024936",
+      "score": 10,
+      "tags": [
+        "ladder-step2-x3"
+      ],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_006",
+      "is_new": true,
+      "first_seen": "2026-08-21",
+      "age_days": 0
+    },
+    {
       "msisdn": "01501471515",
       "score": 10,
       "tags": [
@@ -45603,6 +45434,19 @@
       "carrier": "we",
       "tier": "GRADE_007",
       "is_new": false,
+      "first_seen": "2026-06-22",
+      "age_days": 60
+    },
+    {
+      "msisdn": "01500104836",
+      "score": 10,
+      "tags": [
+        "ladder-step4-x3"
+      ],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_008",
+      "is_new": true,
       "first_seen": "2026-06-22",
       "age_days": 60
     },
@@ -47492,32 +47336,6 @@
       "age_days": 39
     },
     {
-      "msisdn": "01501048637",
-      "score": 10,
-      "tags": [
-        "ladder-step4-x3"
-      ],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_009",
-      "is_new": false,
-      "first_seen": "2026-07-13",
-      "age_days": 39
-    },
-    {
-      "msisdn": "01501302586",
-      "score": 10,
-      "tags": [
-        "ladder-step3-x3"
-      ],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_009",
-      "is_new": false,
-      "first_seen": "2026-07-13",
-      "age_days": 39
-    },
-    {
       "msisdn": "01501437539",
       "score": 10,
       "tags": [
@@ -47579,6 +47397,19 @@
       "carrier": "we",
       "tier": "GRADE_009",
       "is_new": false,
+      "first_seen": "2026-06-25",
+      "age_days": 57
+    },
+    {
+      "msisdn": "01503327532",
+      "score": 10,
+      "tags": [
+        "ladder-step-2-x3"
+      ],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_009",
+      "is_new": true,
       "first_seen": "2026-06-25",
       "age_days": 57
     },
@@ -48094,19 +47925,6 @@
       "score": 10,
       "tags": [
         "ladder-step-2-x3"
-      ],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_009",
-      "is_new": false,
-      "first_seen": "2026-07-31",
-      "age_days": 21
-    },
-    {
-      "msisdn": "01505948522",
-      "score": 10,
-      "tags": [
-        "ladder-step-3-x3"
       ],
       "sim_type": "",
       "carrier": "we",
@@ -49195,19 +49013,6 @@
       "age_days": 0
     },
     {
-      "msisdn": "01555642796",
-      "score": 10,
-      "tags": [
-        "ladder-step-2-x3"
-      ],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_017",
-      "is_new": false,
-      "first_seen": "2026-07-02",
-      "age_days": 50
-    },
-    {
       "msisdn": "01555642831",
       "score": 10,
       "tags": [
@@ -49440,19 +49245,6 @@
       "is_new": false,
       "first_seen": "2026-08-06",
       "age_days": 15
-    },
-    {
-      "msisdn": "01555923753",
-      "score": 10,
-      "tags": [
-        "ladder-step-2-x3"
-      ],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_017",
-      "is_new": false,
-      "first_seen": "2026-08-07",
-      "age_days": 14
     },
     {
       "msisdn": "01555948579",
@@ -50521,19 +50313,6 @@
       "age_days": 15
     },
     {
-      "msisdn": "01555748135",
-      "score": 10,
-      "tags": [
-        "ladder-step2-x3"
-      ],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_018",
-      "is_new": false,
-      "first_seen": "2026-06-22",
-      "age_days": 60
-    },
-    {
       "msisdn": "01555753060",
       "score": 10,
       "tags": [
@@ -51273,19 +51052,6 @@
       "is_new": false,
       "first_seen": "2026-08-07",
       "age_days": 14
-    },
-    {
-      "msisdn": "01555861258",
-      "score": 10,
-      "tags": [
-        "ladder-step3-x3"
-      ],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_018",
-      "is_new": false,
-      "first_seen": "2026-08-08",
-      "age_days": 13
     },
     {
       "msisdn": "01555864023",
@@ -64158,6 +63924,19 @@
       "age_days": 1
     },
     {
+      "msisdn": "01501018110",
+      "score": 8,
+      "tags": [
+        "three-distinct-digits"
+      ],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_012",
+      "is_new": true,
+      "first_seen": "2026-08-21",
+      "age_days": 0
+    },
+    {
       "msisdn": "01555435343",
       "score": 8,
       "tags": [
@@ -64208,6 +63987,19 @@
       "is_new": false,
       "first_seen": "2026-08-06",
       "age_days": 15
+    },
+    {
+      "msisdn": "01555911800",
+      "score": 8,
+      "tags": [
+        "ending-00"
+      ],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_018",
+      "is_new": true,
+      "first_seen": "2026-08-21",
+      "age_days": 0
     },
     {
       "msisdn": "01099688449",
@@ -64324,19 +64116,6 @@
     },
     {
       "msisdn": "01101031903",
-      "score": 4,
-      "tags": [
-        "etisalat-silver"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "silver",
-      "is_new": false,
-      "first_seen": "2026-06-21",
-      "age_days": 61
-    },
-    {
-      "msisdn": "01101031930",
       "score": 4,
       "tags": [
         "etisalat-silver"
@@ -75880,6 +75659,45 @@
       "age_days": 24
     },
     {
+      "msisdn": "01101077355",
+      "score": 4,
+      "tags": [
+        "etisalat-golden"
+      ],
+      "sim_type": "",
+      "carrier": "etisalat",
+      "tier": "golden",
+      "is_new": true,
+      "first_seen": "2026-07-28",
+      "age_days": 24
+    },
+    {
+      "msisdn": "01101077492",
+      "score": 4,
+      "tags": [
+        "etisalat-golden"
+      ],
+      "sim_type": "",
+      "carrier": "etisalat",
+      "tier": "golden",
+      "is_new": true,
+      "first_seen": "2026-07-28",
+      "age_days": 24
+    },
+    {
+      "msisdn": "01101077522",
+      "score": 4,
+      "tags": [
+        "etisalat-golden"
+      ],
+      "sim_type": "",
+      "carrier": "etisalat",
+      "tier": "golden",
+      "is_new": true,
+      "first_seen": "2026-07-28",
+      "age_days": 24
+    },
+    {
       "msisdn": "01501121515",
       "score": 4,
       "tags": [],
@@ -76393,6 +76211,17 @@
       "carrier": "we",
       "tier": "GRADE_007",
       "is_new": false,
+      "first_seen": "2026-06-22",
+      "age_days": 60
+    },
+    {
+      "msisdn": "01558385033",
+      "score": 4,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_007",
+      "is_new": true,
       "first_seen": "2026-06-22",
       "age_days": 60
     },
@@ -76920,7 +76749,7 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_012",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-15",
       "age_days": 6
     },
@@ -78444,17 +78273,6 @@
     },
     {
       "msisdn": "01500220294",
-      "score": 4,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_012",
-      "is_new": false,
-      "first_seen": "2026-08-15",
-      "age_days": 6
-    },
-    {
-      "msisdn": "01500223021",
       "score": 4,
       "tags": [],
       "sim_type": "",
@@ -81831,17 +81649,6 @@
       "age_days": 6
     },
     {
-      "msisdn": "01500510955",
-      "score": 4,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_012",
-      "is_new": false,
-      "first_seen": "2026-08-15",
-      "age_days": 6
-    },
-    {
       "msisdn": "01500511045",
       "score": 4,
       "tags": [],
@@ -84262,17 +84069,6 @@
       "age_days": 6
     },
     {
-      "msisdn": "01500820830",
-      "score": 4,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_012",
-      "is_new": false,
-      "first_seen": "2026-08-15",
-      "age_days": 6
-    },
-    {
       "msisdn": "01500823238",
       "score": 4,
       "tags": [],
@@ -86627,6 +86423,39 @@
       "age_days": 0
     },
     {
+      "msisdn": "01501018210",
+      "score": 4,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_012",
+      "is_new": true,
+      "first_seen": "2026-08-21",
+      "age_days": 0
+    },
+    {
+      "msisdn": "01501019710",
+      "score": 4,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_012",
+      "is_new": true,
+      "first_seen": "2026-08-21",
+      "age_days": 0
+    },
+    {
+      "msisdn": "01501032031",
+      "score": 4,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_012",
+      "is_new": true,
+      "first_seen": "2026-08-21",
+      "age_days": 0
+    },
+    {
       "msisdn": "01555742472",
       "score": 4,
       "tags": [],
@@ -86898,6 +86727,17 @@
       "carrier": "we",
       "tier": "GRADE_018",
       "is_new": false,
+      "first_seen": "2026-08-06",
+      "age_days": 15
+    },
+    {
+      "msisdn": "01555471571",
+      "score": 4,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_018",
+      "is_new": true,
       "first_seen": "2026-08-06",
       "age_days": 15
     },
@@ -87491,7 +87331,7 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_018",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-21",
       "age_days": 0
     },
@@ -87579,6 +87419,19 @@
       "is_new": false,
       "first_seen": "2026-06-23",
       "age_days": 59
+    },
+    {
+      "msisdn": "01101028568",
+      "score": 0,
+      "tags": [
+        "etisalat-silver"
+      ],
+      "sim_type": "",
+      "carrier": "etisalat",
+      "tier": "silver",
+      "is_new": true,
+      "first_seen": "2026-06-24",
+      "age_days": 58
     },
     {
       "msisdn": "01101028714",
@@ -90337,19 +90190,6 @@
       "age_days": 61
     },
     {
-      "msisdn": "01101031542",
-      "score": 0,
-      "tags": [
-        "etisalat-silver"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "silver",
-      "is_new": false,
-      "first_seen": "2026-06-21",
-      "age_days": 61
-    },
-    {
       "msisdn": "01101031543",
       "score": 0,
       "tags": [
@@ -91859,19 +91699,6 @@
     },
     {
       "msisdn": "01101031780",
-      "score": 0,
-      "tags": [
-        "etisalat-silver"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "silver",
-      "is_new": false,
-      "first_seen": "2026-06-21",
-      "age_days": 61
-    },
-    {
-      "msisdn": "01101031781",
       "score": 0,
       "tags": [
         "etisalat-silver"
@@ -95161,19 +94988,6 @@
     },
     {
       "msisdn": "01101032718",
-      "score": 0,
-      "tags": [
-        "etisalat-silver"
-      ],
-      "sim_type": "",
-      "carrier": "etisalat",
-      "tier": "silver",
-      "is_new": false,
-      "first_seen": "2026-06-21",
-      "age_days": 61
-    },
-    {
-      "msisdn": "01101032719",
       "score": 0,
       "tags": [
         "etisalat-silver"
@@ -99523,7 +99337,7 @@
       "sim_type": "",
       "carrier": "etisalat",
       "tier": "silver",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-21",
       "age_days": 0
     },
@@ -99536,42 +99350,48 @@
       "sim_type": "",
       "carrier": "etisalat",
       "tier": "silver",
+      "is_new": false,
+      "first_seen": "2026-08-21",
+      "age_days": 0
+    },
+    {
+      "msisdn": "01101034953",
+      "score": 0,
+      "tags": [
+        "etisalat-silver"
+      ],
+      "sim_type": "",
+      "carrier": "etisalat",
+      "tier": "silver",
       "is_new": true,
       "first_seen": "2026-08-21",
       "age_days": 0
     },
     {
-      "msisdn": "01501012783",
+      "msisdn": "01101034954",
       "score": 0,
-      "tags": [],
+      "tags": [
+        "etisalat-silver"
+      ],
       "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_006",
-      "is_new": false,
-      "first_seen": "2026-08-09",
-      "age_days": 12
+      "carrier": "etisalat",
+      "tier": "silver",
+      "is_new": true,
+      "first_seen": "2026-08-21",
+      "age_days": 0
     },
     {
-      "msisdn": "01501013297",
+      "msisdn": "01101034960",
       "score": 0,
-      "tags": [],
+      "tags": [
+        "etisalat-silver"
+      ],
       "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_006",
-      "is_new": false,
-      "first_seen": "2026-08-09",
-      "age_days": 12
-    },
-    {
-      "msisdn": "01501013427",
-      "score": 0,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_006",
-      "is_new": false,
-      "first_seen": "2026-08-09",
-      "age_days": 12
+      "carrier": "etisalat",
+      "tier": "silver",
+      "is_new": true,
+      "first_seen": "2026-08-21",
+      "age_days": 0
     },
     {
       "msisdn": "01501013492",
@@ -99591,7 +99411,7 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_006",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-13",
       "age_days": 8
     },
@@ -101840,17 +101660,6 @@
       "age_days": 8
     },
     {
-      "msisdn": "01501082488",
-      "score": 0,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_006",
-      "is_new": false,
-      "first_seen": "2026-08-13",
-      "age_days": 8
-    },
-    {
       "msisdn": "01501082671",
       "score": 0,
       "tags": [],
@@ -102509,17 +102318,6 @@
       "is_new": false,
       "first_seen": "2026-08-09",
       "age_days": 12
-    },
-    {
-      "msisdn": "01501097941",
-      "score": 0,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_006",
-      "is_new": false,
-      "first_seen": "2026-08-13",
-      "age_days": 8
     },
     {
       "msisdn": "01501098043",
@@ -105800,17 +105598,6 @@
       "age_days": 4
     },
     {
-      "msisdn": "01501635508",
-      "score": 0,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_006",
-      "is_new": false,
-      "first_seen": "2026-08-12",
-      "age_days": 9
-    },
-    {
       "msisdn": "01501635593",
       "score": 0,
       "tags": [],
@@ -108996,7 +108783,7 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_006",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-21",
       "age_days": 0
     },
@@ -109007,7 +108794,7 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_006",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-21",
       "age_days": 0
     },
@@ -109018,7 +108805,7 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_006",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-21",
       "age_days": 0
     },
@@ -109029,12 +108816,78 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_006",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-21",
       "age_days": 0
     },
     {
       "msisdn": "01503022438",
+      "score": 0,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_006",
+      "is_new": false,
+      "first_seen": "2026-08-21",
+      "age_days": 0
+    },
+    {
+      "msisdn": "01503023871",
+      "score": 0,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_006",
+      "is_new": true,
+      "first_seen": "2026-08-21",
+      "age_days": 0
+    },
+    {
+      "msisdn": "01503025166",
+      "score": 0,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_006",
+      "is_new": true,
+      "first_seen": "2026-08-21",
+      "age_days": 0
+    },
+    {
+      "msisdn": "01503026067",
+      "score": 0,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_006",
+      "is_new": true,
+      "first_seen": "2026-08-21",
+      "age_days": 0
+    },
+    {
+      "msisdn": "01503026480",
+      "score": 0,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_006",
+      "is_new": true,
+      "first_seen": "2026-08-21",
+      "age_days": 0
+    },
+    {
+      "msisdn": "01503027650",
+      "score": 0,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_006",
+      "is_new": true,
+      "first_seen": "2026-08-21",
+      "age_days": 0
+    },
+    {
+      "msisdn": "01503027872",
       "score": 0,
       "tags": [],
       "sim_type": "",
@@ -110563,6 +110416,17 @@
       "age_days": 60
     },
     {
+      "msisdn": "01558385011",
+      "score": 0,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_007",
+      "is_new": true,
+      "first_seen": "2026-06-22",
+      "age_days": 60
+    },
+    {
       "msisdn": "01558385022",
       "score": 0,
       "tags": [],
@@ -110581,6 +110445,17 @@
       "carrier": "we",
       "tier": "GRADE_007",
       "is_new": false,
+      "first_seen": "2026-06-22",
+      "age_days": 60
+    },
+    {
+      "msisdn": "01558385077",
+      "score": 0,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_007",
+      "is_new": true,
       "first_seen": "2026-06-22",
       "age_days": 60
     },
@@ -111103,6 +110978,17 @@
     },
     {
       "msisdn": "01500113296",
+      "score": 0,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_008",
+      "is_new": false,
+      "first_seen": "2026-06-22",
+      "age_days": 60
+    },
+    {
+      "msisdn": "01500113298",
       "score": 0,
       "tags": [],
       "sim_type": "",
@@ -114524,17 +114410,6 @@
     },
     {
       "msisdn": "01500228906",
-      "score": 0,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_008",
-      "is_new": false,
-      "first_seen": "2026-06-22",
-      "age_days": 60
-    },
-    {
-      "msisdn": "01500228943",
       "score": 0,
       "tags": [],
       "sim_type": "",
@@ -120166,18 +120041,29 @@
       "age_days": 1
     },
     {
-      "msisdn": "01500311384",
+      "msisdn": "01501043629",
       "score": 0,
       "tags": [],
       "sim_type": "",
       "carrier": "we",
-      "tier": "GRADE_008",
+      "tier": "GRADE_009",
       "is_new": true,
-      "first_seen": "2026-08-20",
-      "age_days": 1
+      "first_seen": "2026-07-13",
+      "age_days": 39
     },
     {
-      "msisdn": "01501021746",
+      "msisdn": "01501047282",
+      "score": 0,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_009",
+      "is_new": true,
+      "first_seen": "2026-07-13",
+      "age_days": 39
+    },
+    {
+      "msisdn": "01501049365",
       "score": 0,
       "tags": [],
       "sim_type": "",
@@ -120304,7 +120190,7 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_009",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-07-13",
       "age_days": 39
     },
@@ -120453,17 +120339,6 @@
     },
     {
       "msisdn": "01503433761",
-      "score": 0,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_009",
-      "is_new": false,
-      "first_seen": "2026-07-13",
-      "age_days": 39
-    },
-    {
-      "msisdn": "01503447598",
       "score": 0,
       "tags": [],
       "sim_type": "",
@@ -129709,7 +129584,7 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_009",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-21",
       "age_days": 0
     },
@@ -129720,7 +129595,7 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_009",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-21",
       "age_days": 0
     },
@@ -129731,12 +129606,23 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_009",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-21",
       "age_days": 0
     },
     {
       "msisdn": "01515699458",
+      "score": 0,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_009",
+      "is_new": false,
+      "first_seen": "2026-08-21",
+      "age_days": 0
+    },
+    {
+      "msisdn": "01515716243",
       "score": 0,
       "tags": [],
       "sim_type": "",
@@ -129835,26 +129721,15 @@
       "age_days": 50
     },
     {
-      "msisdn": "01555347259",
+      "msisdn": "01555397851",
       "score": 0,
       "tags": [],
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_017",
-      "is_new": false,
+      "is_new": true,
       "first_seen": "2026-06-25",
       "age_days": 57
-    },
-    {
-      "msisdn": "01555619364",
-      "score": 0,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_017",
-      "is_new": false,
-      "first_seen": "2026-06-30",
-      "age_days": 52
     },
     {
       "msisdn": "01555643268",
@@ -129874,7 +129749,7 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_017",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-07-02",
       "age_days": 50
     },
@@ -130110,6 +129985,17 @@
       "age_days": 48
     },
     {
+      "msisdn": "01555647029",
+      "score": 0,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_017",
+      "is_new": true,
+      "first_seen": "2026-07-05",
+      "age_days": 47
+    },
+    {
       "msisdn": "01555647081",
       "score": 0,
       "tags": [],
@@ -130287,17 +130173,6 @@
     },
     {
       "msisdn": "01555682952",
-      "score": 0,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_017",
-      "is_new": false,
-      "first_seen": "2026-07-29",
-      "age_days": 23
-    },
-    {
-      "msisdn": "01555682957",
       "score": 0,
       "tags": [],
       "sim_type": "",
@@ -131276,17 +131151,6 @@
       "age_days": 15
     },
     {
-      "msisdn": "01555923658",
-      "score": 0,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_017",
-      "is_new": false,
-      "first_seen": "2026-08-06",
-      "age_days": 15
-    },
-    {
       "msisdn": "01555923681",
       "score": 0,
       "tags": [],
@@ -131307,17 +131171,6 @@
       "is_new": false,
       "first_seen": "2026-08-06",
       "age_days": 15
-    },
-    {
-      "msisdn": "01555923743",
-      "score": 0,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_017",
-      "is_new": false,
-      "first_seen": "2026-08-07",
-      "age_days": 14
     },
     {
       "msisdn": "01555923749",
@@ -131343,17 +131196,6 @@
     },
     {
       "msisdn": "01555923759",
-      "score": 0,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_017",
-      "is_new": false,
-      "first_seen": "2026-08-07",
-      "age_days": 14
-    },
-    {
-      "msisdn": "01555923769",
       "score": 0,
       "tags": [],
       "sim_type": "",
@@ -131507,17 +131349,6 @@
       "age_days": 11
     },
     {
-      "msisdn": "01555948657",
-      "score": 0,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_017",
-      "is_new": false,
-      "first_seen": "2026-08-10",
-      "age_days": 11
-    },
-    {
       "msisdn": "01555948658",
       "score": 0,
       "tags": [],
@@ -131552,17 +131383,6 @@
     },
     {
       "msisdn": "01555948721",
-      "score": 0,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_017",
-      "is_new": false,
-      "first_seen": "2026-08-10",
-      "age_days": 11
-    },
-    {
-      "msisdn": "01555948729",
       "score": 0,
       "tags": [],
       "sim_type": "",
@@ -132867,6 +132687,17 @@
       "carrier": "we",
       "tier": "GRADE_018",
       "is_new": false,
+      "first_seen": "2026-08-06",
+      "age_days": 15
+    },
+    {
+      "msisdn": "01555234824",
+      "score": 0,
+      "tags": [],
+      "sim_type": "",
+      "carrier": "we",
+      "tier": "GRADE_018",
+      "is_new": true,
       "first_seen": "2026-08-06",
       "age_days": 15
     },
@@ -139042,17 +138873,6 @@
       "age_days": 15
     },
     {
-      "msisdn": "01555839210",
-      "score": 0,
-      "tags": [],
-      "sim_type": "",
-      "carrier": "we",
-      "tier": "GRADE_018",
-      "is_new": false,
-      "first_seen": "2026-08-06",
-      "age_days": 15
-    },
-    {
       "msisdn": "01555839486",
       "score": 0,
       "tags": [],
@@ -140940,7 +140760,7 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_018",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-21",
       "age_days": 0
     },
@@ -140951,7 +140771,7 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_018",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-21",
       "age_days": 0
     },
@@ -140962,7 +140782,7 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_018",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-21",
       "age_days": 0
     },
@@ -140973,7 +140793,7 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_018",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-21",
       "age_days": 0
     },
@@ -140984,7 +140804,7 @@
       "sim_type": "",
       "carrier": "we",
       "tier": "GRADE_018",
-      "is_new": true,
+      "is_new": false,
       "first_seen": "2026-08-21",
       "age_days": 0
     }
