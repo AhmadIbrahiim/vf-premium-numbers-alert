@@ -133,6 +133,29 @@ gh-pages step. **Going to a server-rendered app first would have skipped both de
   `wrangler`, no `CLOUDFLARE_API_TOKEN`. Test writeability with a cheap write before
   building on it.
 
+## The LLM grading is off by default, and used to hide it
+
+`gradeCandidates` takes the top `CANDIDATE_COUNT` (150) numbers by heuristic score, asks
+GitHub Models (`openai/gpt-4o-mini`) to rank the best `BEST_COUNT` (30) with reasons,
+discards any msisdn it did not send (anti-hallucination), clamps grades to 0-100, and
+caches the result in `meta.grades` keyed by a signature of the candidate set — so the
+model is called only when the top 150 actually changes.
+
+**Every failure path falls back to the heuristic**, which reuses the score as the grade.
+That is correct behaviour, but the run summary used to print `llm=graded` for both, where
+"graded" only meant *gradeCandidates was called*. The pipeline therefore reported
+success while running entirely on heuristics, and the logs gave no hint.
+
+It now reports `grading=model:<name>`, `grading=heuristic:<why>` (`no-token`,
+`http-503`, `bad-json`, …) or `grading=cached:<source>`. **If you see
+`heuristic:no-token`, the LLM is not running.** Two tells in the data:
+
+- `best_grade` exactly equals `score` for every row
+- `reason` is a comma-joined tag list (`"pair-ladder, etisalat-golden"`) rather than prose
+
+Neither the model's grades nor its reasons can be recovered retroactively — the cache
+holds whatever the last run produced, so clear `meta.grades` after fixing the token.
+
 ## Email alerts
 
 Resend, from the **poller** — the web app has nothing email-related in it.
@@ -204,9 +227,8 @@ Both are recoverable, and neither breaks a poll:
 
 - **LLM grading.** `src/grade.js` calls GitHub Models, which Actions authenticated for
   free with its built-in `GITHUB_TOKEN`. On GitLab there is no such token, so grading
-  falls back to the deterministic scorer (which is the designed fallback, not a
-  failure). To restore it, add a GitHub PAT with `models: read` as the `GITHUB_TOKEN`
-  CI/CD variable.
+  falls back to the deterministic scorer (the designed fallback, not a failure). To
+  restore it, add a GitHub PAT with `models: read` as the `GITHUB_TOKEN` CI/CD variable.
 - **GitHub Issue alerts.** `src/notify.js` needs a token and `GITHUB_REPOSITORY`; off
   GitHub it returns `skipped-no-credentials` and does nothing. Email alerts via Resend
   are unaffected and remain the real alerting channel.

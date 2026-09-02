@@ -162,14 +162,16 @@ export async function run({ fetchImpl, dbFetch } = {}) {
   // use it to re-evaluate all numbers after a scorer/prompt change or on demand.
   const forceRegrade = process.env.REGRADE === "1" || process.env.REGRADE === "true";
   const prevGrades = await db.readMeta("grades", dbOpts);
-  let graded, regraded;
+  let graded, gradeSource;
   if (!forceRegrade && gradeCacheValid(prevGrades, candSig)) {
     graded = prevGrades.graded;
-    regraded = false;
+    // Report what produced the cached ranking, not merely that it was cached.
+    gradeSource = `cached:${prevGrades.source || "unknown"}`;
   } else {
-    graded = await gradeCandidates(candidates, { token: GITHUB_TOKEN, model: MODEL, count: BEST_COUNT });
-    await db.writeMeta("grades", { sig: candSig, graded }, dbOpts);
-    regraded = true;
+    const result = await gradeCandidates(candidates, { token: GITHUB_TOKEN, model: MODEL, count: BEST_COUNT });
+    graded = result.ranked;
+    gradeSource = result.source === "model" ? `model:${result.detail}` : `heuristic:${result.detail}`;
+    await db.writeMeta("grades", { sig: candSig, graded, source: result.source, detail: result.detail }, dbOpts);
   }
   // attach tags/score back onto graded entries; drop any no longer available.
   const availableSet = new Set(available);
@@ -231,10 +233,10 @@ export async function run({ fetchImpl, dbFetch } = {}) {
     `new=${diff.newMsisdns.length} gone=${diff.disappearedMsisdns.length} pruned=${pruned} ` +
     `trusted=${trustedCarriers.join("+") || "none"}` +
     `${failed?.length ? ` failed:${failed.map((f) => f.carrier).join(",")}` : ""} ` +
-    `baseline=${diff.isBaseline} llm=${regraded ? "graded" : "cached"} ` +
+    `baseline=${diff.isBaseline} grading=${gradeSource} ` +
     `alerts=${newPremium.length} (issue:${notifyResult} email:${emailResult}) changed=${changed}`
   );
-  return { changed, diff, newPremium, notifyResult, regraded };
+  return { changed, diff, newPremium, notifyResult, gradeSource };
 }
 
 // Run when invoked directly (node src/run.js)

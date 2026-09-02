@@ -2,16 +2,26 @@ const ENDPOINT = "https://models.github.ai/inference/chat/completions";
 
 /**
  * Build the deterministic fallback ranking from the input candidates.
+ *
+ * `source: "heuristic"` is what lets the caller tell a real model ranking from this.
+ * Without it the run summary reported "graded" either way, and the pipeline quietly ran
+ * on heuristics for weeks while the logs claimed otherwise.
+ *
  * @param {Array<{msisdn:string, score:number, tags:string[]}>} candidates
  * @param {number} count
- * @returns {Array<{msisdn:string, grade:number, reason:string}>}
+ * @param {string} why - short reason, surfaced in the run summary
+ * @returns {{ranked: Array<{msisdn:string, grade:number, reason:string}>, source: string, detail: string}}
  */
-function fallback(candidates, count) {
-  return candidates.slice(0, count).map((c) => ({
-    msisdn: c.msisdn,
-    grade: c.score,
-    reason: (Array.isArray(c.tags) ? c.tags : []).join(", ") || "pattern match",
-  }));
+function fallback(candidates, count, why) {
+  return {
+    ranked: candidates.slice(0, count).map((c) => ({
+      msisdn: c.msisdn,
+      grade: c.score,
+      reason: (Array.isArray(c.tags) ? c.tags : []).join(", ") || "pattern match",
+    })),
+    source: "heuristic",
+    detail: why,
+  };
 }
 
 /** Clamp a value to an integer in the 0-100 range. */
@@ -24,9 +34,13 @@ function clampGrade(value) {
 /**
  * Rank candidates into the best `count` with reasons via GitHub Models;
  * deterministic fallback on any error. Never throws.
- * @param {Array<{msisdn:string, score:number, tags:string[]}>} candidates - already pattern-ranked, top ~80
+ *
+ * Always reports which path produced the ranking, so a silent fallback is visible in
+ * the run summary instead of being indistinguishable from a real grading.
+ *
+ * @param {Array<{msisdn:string, score:number, tags:string[]}>} candidates - already pattern-ranked
  * @param {object} [opts] - { token, model, count=30, fetchImpl, timeoutMs }
- * @returns {Promise<Array<{msisdn:string, grade:number, reason:string}>>}  length <= count
+ * @returns {Promise<{ranked: Array<{msisdn:string, grade:number, reason:string}>, source: "model"|"heuristic", detail: string}>}
  */
 export async function gradeCandidates(candidates, opts = {}) {
   const {
@@ -42,7 +56,7 @@ export async function gradeCandidates(candidates, opts = {}) {
   // No token -> deterministic fallback without touching the network.
   if (!token) {
     console.warn("gradeCandidates fallback: no token provided");
-    return fallback(list, count);
+    return fallback(list, count, "no-token");
   }
 
   const fetchFn = fetchImpl || globalThis.fetch;
@@ -118,14 +132,14 @@ export async function gradeCandidates(candidates, opts = {}) {
       console.warn(
         "gradeCandidates fallback: non-2xx response (" + (res && res.status) + ")",
       );
-      return fallback(list, count);
+      return fallback(list, count, "http-" + (res && res.status));
     }
 
     const data = await res.json();
     const content = data?.choices?.[0]?.message?.content;
     if (!content || typeof content !== "string") {
       console.warn("gradeCandidates fallback: empty or invalid content");
-      return fallback(list, count);
+      return fallback(list, count, "empty-content");
     }
 
     let parsed;
@@ -133,13 +147,13 @@ export async function gradeCandidates(candidates, opts = {}) {
       parsed = JSON.parse(content);
     } catch {
       console.warn("gradeCandidates fallback: unparseable JSON content");
-      return fallback(list, count);
+      return fallback(list, count, "bad-json");
     }
 
     const ranked = parsed?.ranked;
     if (!Array.isArray(ranked)) {
       console.warn("gradeCandidates fallback: missing ranked array");
-      return fallback(list, count);
+      return fallback(list, count, "no-ranked-array");
     }
 
     const allowed = new Set(list.map((c) => c.msisdn));
@@ -154,13 +168,13 @@ export async function gradeCandidates(candidates, opts = {}) {
 
     if (cleaned.length < 1) {
       console.warn("gradeCandidates fallback: no valid ranked items");
-      return fallback(list, count);
+      return fallback(list, count, "no-valid-items");
     }
 
-    return cleaned;
+    return { ranked: cleaned, source: "model", detail: model };
   } catch (err) {
     console.warn("gradeCandidates fallback: request error (" + (err && err.name) + ")");
-    return fallback(list, count);
+    return fallback(list, count, "request-" + (err && err.name));
   } finally {
     clearTimeout(timer);
   }
