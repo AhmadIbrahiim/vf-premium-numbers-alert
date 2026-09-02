@@ -79,7 +79,7 @@ dashboard reads them live:
 
 ### How the dashboard reads Postgres
 
-The dashboard (`web/`) is a Next.js app on Vercel. Pages and route handlers run on the
+The dashboard is a Next.js app on Vercel, at the repo root. Pages and route handlers run on the
 server, so `DATABASE_URL` stays a private environment variable and no database
 credential reaches the browser. Filtering, sorting and paging happen in Postgres, so a
 search covers the entire ~206k catalogue and "Load more" is a real query.
@@ -89,7 +89,7 @@ only bad options: publish the database behind a public read-only endpoint, or pu
 JSON snapshot that is stale the moment it is written. Both were built and both were
 worse. One server-side render removes the whole problem.
 
-`web/lib/queries.js` is the only place SQL is written. Route handlers hand request
+`lib/queries.js` is the only place SQL is written. Route handlers hand request
 params to `buildQuery`, which validates them against a whitelist and binds them, so
 request input never reaches the SQL text and row limits are always clamped. It is pure,
 so the repo-root test suite covers it without booting Next.
@@ -123,8 +123,8 @@ a carrier is failing right now.
    it runs — without a schedule the poller never fires.
 6. Run it once from *CI/CD → Pipelines → Run pipeline* to seed the baseline (no alerts
    on the first run).
-7. **Deploy the dashboard:** see [`web/README.md`](web/README.md). Set Vercel's **Root
-   Directory** to `web` and add `DATABASE_URL`.
+7. **Deploy the dashboard:** see [`docs/dashboard.md`](docs/dashboard.md). The Next app
+   is at the repo root, so Vercel auto-detects it — just add `DATABASE_URL`.
 
 Leave CI/CD variables **unprotected** unless `main` is a protected branch — a protected
 variable is invisible to pipelines on unprotected branches, which looks identical to the
@@ -162,18 +162,18 @@ Set as GitLab CI/CD variables or in `.gitlab-ci.yml` (all optional):
 ## Local development
 
 ```bash
-node --test                        # poller + query tests (no dependencies, Node 20+)
+node --test                        # poller + query tests; needs no npm install at all
 
 # live dry run: no GITHUB_TOKEN -> deterministic grading instead of the LLM.
 # Point DATABASE_URL at a scratch Neon branch, not the one the pipeline writes to.
-DATABASE_URL=postgres://... node src/run.js
+DATABASE_URL=postgres://... npm run poll
 
-cd web && npm install && npm run dev   # the dashboard, against the same database
+npm install && npm run dev         # the dashboard, against the same database
 ```
 
-The poller has **no dependencies** — it is the root `package.json`, and `node --test`
-runs against plain Node. The dashboard is its own package under `web/` with Next and
-React, so installing it never touches the poller.
+One `package.json` covers both, because Vercel only auto-detects a Next app at the repo
+root. The poller's own code still imports nothing outside `node:` builtins, so
+`node --test` and `npm run poll` work with no install.
 
 The test suite needs no database: `test/helpers/fake-db.js` is an in-memory stand-in
 for Neon's SQL-over-HTTP endpoint.

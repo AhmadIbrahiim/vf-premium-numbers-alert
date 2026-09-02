@@ -8,12 +8,17 @@ re-learned the hard way otherwise.
 
 | | Poller | Dashboard |
 |---|---|---|
-| Where | root `package.json`, `src/`, `test/` | `web/` |
-| Deps | **zero** — defend this | Next.js + React |
-| Runs on | GitLab CI schedule, every 30 min | Vercel (Root Directory `web`) |
+| Where | `src/`, `test/` | `app/`, `components/`, `lib/` |
+| Runs on | GitLab CI schedule, every 30 min | Vercel (repo root, no config) |
 | Reads | carrier APIs → Postgres | Postgres, server-side |
 
-Installing one never touches the other. Don't add a dependency to the root package.
+One `package.json` at the root holds both, because Vercel auto-detects a Next app at the
+repo root and nowhere else without a setting. `npm run poll` is the poller (Next needed
+`start`).
+
+**The poller's code still imports nothing outside `node:` builtins** — that is the
+property worth defending, and `node --test` runs with no `npm install` at all. Don't add
+a runtime dependency to `src/`.
 
 **The poller cannot move to Vercel.** A full poll takes 174–207s, past the function
 ceiling (60s Hobby / 300s Pro), and WE throttling stretches it further. Vercel Cron
@@ -101,7 +106,7 @@ reason about in serverless. Two gotchas:
 
 ## Dashboard reads Postgres server-side
 
-`web/lib/queries.js` is the **only** place SQL is written. Route handlers pass request
+`lib/queries.js` is the **only** place SQL is written. Route handlers pass request
 params to `buildQuery`, which whitelists them, binds them and clamps row limits —
 request input never reaches SQL text. It is pure, so the repo-root `node --test` covers
 it without booting Next.
@@ -152,13 +157,13 @@ cache-busted `import()` in tests still gets the *same* `config.js` instance.
 ```bash
 node --test                            # poller + query tests, no deps needed
 
-DATABASE_URL=postgres://... node src/run.js          # live dry run
+DATABASE_URL=postgres://... npm run poll             # live dry run
 WE_GRADE_MIN=17 WE_GRADE_MAX=17 ...                  # scope WE while developing
 REGRADE=1 ...                                        # bypass the LLM grade cache
 
-cd web && npm install && npm run dev   # dashboard; needs web/.env.local
-cd web && npm run build                # must pass before pushing
-cd web && npx vercel --prod            # deploy
+npm install && npm run dev             # dashboard; needs .env.local
+npm run build                          # must pass before pushing
+npx vercel --prod                      # deploy
 ```
 
 No `GITHUB_TOKEN` → grading falls back to the deterministic scorer, which is fine for a
@@ -206,26 +211,29 @@ Both are recoverable, and neither breaks a poll:
   GitHub it returns `skipped-no-credentials` and does nothing. Email alerts via Resend
   are unaffected and remain the real alerting channel.
 
-### Vercel needs Root Directory = `web`
+### Vercel: the app is at the repo root, deliberately
 
-The Next app is not at the repo root, so **Settings → Build & Deployment → Root
-Directory** must be `web`. Without it Vercel builds the root, finds no framework, and
-serves a 404 — the tell in the log is a build that finishes in milliseconds with
-`Build Completed in /vercel/output [60ms]` and "no files were prepared". It is not a
-routing problem; nothing was built. Vercel reads `web/vercel.json` once the root is set.
+It used to live in `web/`, which needs **Root Directory = `web`** in project settings.
+That setting was got wrong twice and each time produced a bare `404: NOT_FOUND` — the
+tell being a build that finishes in milliseconds with
+`Build Completed in /vercel/output [60ms]` and "no files were prepared". Nothing was
+built; it is never a routing problem.
+
+Moving the app to the root removed the setting from the equation entirely. **Don't move
+it back into a subdirectory** unless you are prepared to own that setting.
 
 `DATABASE_URL` must be set for Production, Preview **and** Development, or preview
 deploys render the "couldn't reach the database" state.
 
 ## Secrets
 
-None in the repo (`web/.env.example` holds placeholders only). Live values:
+None in the repo (`.env.example` holds placeholders only). Live values:
 
 | Where | Holds |
 |---|---|
 | GitLab CI/CD variables | `DATABASE_URL`, `RESEND_API_KEY`, `ALERT_EMAIL_TO`, `DASHBOARD_URL`, optionally `GITHUB_TOKEN` |
 | Vercel env | `DATABASE_URL` only |
-| Local | `web/.env.local` (gitignored) |
+| Local | `.env.local` (gitignored) |
 
 Mask every one of them, and leave "Protected" **off** unless `main` is a protected
 branch — a protected variable is invisible to pipelines on unprotected branches, which

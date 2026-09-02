@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { buildQuery, MAX_LIMIT, CARRIERS } from "../web/lib/queries.js";
+import { buildQuery, MAX_LIMIT, CARRIERS } from "../lib/queries.js";
 
 /** buildQuery accepts URLSearchParams in production; a plain object is equivalent. */
 const q = (route, params) => buildQuery(route, new URLSearchParams(params));
@@ -120,7 +120,7 @@ test("buildQuery also accepts a plain object, not just URLSearchParams", () => {
 test("the query module stays free of server-only imports", async () => {
   // It runs in the Next server runtime and in plain Node under test, so it must not
   // reach for `process.env`, a database client, or anything Next-specific.
-  const src = await readFile(new URL("../web/lib/queries.js", import.meta.url), "utf8");
+  const src = await readFile(new URL("../lib/queries.js", import.meta.url), "utf8");
   assert.ok(!/\bprocess\.env\b/.test(src), "no environment access");
   assert.ok(!/\bimport\b/.test(src), "no imports at all");
 });

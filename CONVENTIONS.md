@@ -1,9 +1,10 @@
 # Build conventions (read before writing any module)
 
-The **poller** (`src/`, `test/`) is a **zero-dependency Node.js 20+ project using ES
-modules** — that constraint still holds and should be defended. The **dashboard**
-(`web/`) is a separate package: a Next.js app with React, deployed to Vercel. Installing
-one never affects the other.
+The **poller** (`src/`, `test/`) uses **ES modules and nothing outside `node:`
+builtins** — that constraint still holds and should be defended: `node --test` and
+`npm run poll` need no `npm install`. The **dashboard** (`app/`, `components/`, `lib/`)
+is a Next.js app with React, deployed to Vercel from the repo root. They share one
+`package.json` only because Vercel auto-detects Next at the root and nowhere else.
 
 ## Hard rules
 - ES modules only: `import`/`export`, never `require`. Files end in `.js`.

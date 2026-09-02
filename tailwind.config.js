@@ -1,6 +1,6 @@
 /** Tailwind config for the dashboard. Built by Next at compile time. */
 export default {
-  content: ["./app/**/*.{js,jsx}", "./components/**/*.{js,jsx}"],
+  content: ["./app/**/*.{js,jsx}", "./components/**/*.{js,jsx}", "./lib/**/*.{js,jsx}"],
   darkMode: "class",
   theme: {
     extend: {

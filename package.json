@@ -1,14 +1,27 @@
 {
   "name": "vf-premium-numbers-alert",
   "version": "0.1.0",
-  "description": "Monitor Vodafone Egypt Red eSIM numbers, grade premium digit patterns, alert on new arrivals.",
+  "description": "Egyptian premium mobile numbers: a zero-dependency poller (src/) plus a Next.js dashboard, both against Neon Postgres.",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.9"
   },
   "scripts": {
-    "start": "node src/run.js",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "poll": "node src/run.js",
     "test": "node --test"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "next": "16.3.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17"
+  }
 }

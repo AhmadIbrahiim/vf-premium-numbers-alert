@@ -2,8 +2,8 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  // This app is a subdirectory of a larger repo (the poller lives at the root), so pin
-  // the workspace root — otherwise Turbopack walks up looking for a lockfile and warns.
+  // The app is at the repo root so Vercel auto-detects it with no Root Directory
+  // setting — getting that setting wrong is a 404 with a build that produces nothing.
   turbopack: { root: import.meta.dirname },
 };
 

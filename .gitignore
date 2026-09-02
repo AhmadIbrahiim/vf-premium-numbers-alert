@@ -1,9 +1,7 @@
 node_modules/
-data/
-public/
-web/latest.json
-web/history.json
-web/best-ever.json
-web/index.json
-web/events.jsonl.json
+.next/
+.vercel
+.env*.local
+
+# Playwright MCP scratch output
 .playwright-mcp/

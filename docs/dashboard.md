@@ -5,33 +5,37 @@ variable and no database credential ever reaches the browser. That is the whole 
 this replaced the static GitHub Pages build: a static host has no server, which forced
 either a publicly readable database or a published JSON snapshot.
 
-The poller is separate and stays in GitHub Actions (`../src`). It cannot run here: a
+The poller is separate and runs on a GitLab CI schedule (`src/`). It cannot run here: a
 full poll takes 3-5 minutes, past Vercel's function ceiling.
 
 ## Deploy
 
+The app is at the **repo root**, so Vercel auto-detects Next.js with no Root Directory
+setting — that setting is what produced two `404: NOT_FOUND` deployments, so it was
+removed from the equation on purpose.
+
 ```bash
-cd web
-npx vercel            # first run links the project
-npx vercel env add DATABASE_URL production   # paste the Neon connection string
+npx vercel                                    # first run links the project
+npx vercel env add DATABASE_URL production    # paste the Neon connection string
 npx vercel --prod
 ```
 
-If you import the repo through the Vercel dashboard instead, set **Root Directory** to
-`web` and add `DATABASE_URL` as an environment variable. `regions` in `vercel.json` is
-`iad1` to sit next to the `us-east-2` Neon project — moving it further away adds a round
-trip to every query.
+Importing through the Vercel dashboard works the same way: leave Root Directory empty
+and add `DATABASE_URL` (Production, Preview and Development). `regions` in `vercel.json`
+is `iad1` to sit beside the `us-east-2` Neon project — further away adds a round trip to
+every query.
 
 ## Local development
 
 ```bash
-cd web
 npm install
 echo 'DATABASE_URL=postgresql://…' > .env.local   # never commit this
 npm run dev
 ```
 
 ## Layout
+
+Paths are relative to the repo root.
 
 | Path | Role |
 |---|---|
