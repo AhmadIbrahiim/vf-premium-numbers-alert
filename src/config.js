@@ -78,8 +78,18 @@ export const ALERT_THRESHOLD = Number(process.env.ALERT_THRESHOLD || 50);
 // at call time, the same way src/db.js handles DATABASE_URL, so they are never captured
 // at import and stay in exactly one place.
 
-/** GitHub repo "owner/name", provided by Actions as GITHUB_REPOSITORY. */
+/**
+ * GitHub repo "owner/name". Only used for the Issue-based alert channel, which needs a
+ * GitHub token; off GitHub it is empty and that channel is skipped.
+ */
 export const REPO = process.env.GITHUB_REPOSITORY || "";
+
+/**
+ * Where the dashboard lives, for the link in alert emails. Explicit because it is no
+ * longer derivable from the repo: the dashboard is a Vercel app, not GitHub Pages, and
+ * the old derived `<owner>.github.io/<repo>` link pointed at a retired site.
+ */
+export const DASHBOARD_URL = process.env.DASHBOARD_URL || "";
 
 /** Timezone for first_seen / last_seen / age calculations. */
 export const TZ = "Africa/Cairo";

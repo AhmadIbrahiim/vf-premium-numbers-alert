@@ -1,0 +1,54 @@
+# GitLab CI — runs the poller. The dashboard is deployed by Vercel, not from here.
+#
+# Two jobs:
+#   test  — on pushes and merge requests. No install step: the poller has no
+#           dependencies, so `node --test` runs against plain Node.
+#   poll  — on a pipeline schedule (or a manual run). Fetches all three carriers and
+#           writes to Postgres.
+#
+# The schedule is NOT defined in this file. GitLab keeps pipeline schedules in project
+# settings: CI/CD → Schedules → New schedule, cron `7,37 * * * *`, target branch `main`.
+# Without that, `poll` never runs on its own.
+
+# Pinned to the runtime the test suite is actually exercised against. Bumping this is
+# fine but re-run `node --test` first — the poller leans on undici behaviour (connect
+# timeouts against a throttling carrier) that has changed between majors.
+image: node:20-alpine
+
+stages:
+  - test
+  - poll
+
+test:
+  stage: test
+  script:
+    - node --version
+    - node --test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push"
+
+poll:
+  stage: poll
+  # A full poll is 3-5 minutes, almost all of it WE pagination. The ceiling is generous
+  # because a throttled carrier makes it slower, not faster.
+  timeout: 20 minutes
+  # Never let two polls hit the carriers — or write the database — at once. Concurrent
+  # runs are how the WE IP throttle gets triggered.
+  resource_group: poll
+  interruptible: false
+  variables:
+    # Kept low deliberately: 8-way WE concurrency got this IP throttled twice.
+    WE_CONCURRENCY: "4"
+  script:
+    - |
+      if [ -z "$DATABASE_URL" ]; then
+        echo "DATABASE_URL is not set. Add it under Settings -> CI/CD -> Variables"
+        echo "(masked, and NOT 'protected' unless this branch is protected)."
+        exit 1
+      fi
+    - node src/run.js
+  rules:
+    # `schedule` is the cron pipeline; `web` is the Run pipeline button.
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"

@@ -10,7 +10,7 @@ import * as db from "./db.js";
 import { notify } from "./notify.js";
 import { sendPremiumEmail } from "./email.js";
 import {
-  MODEL, GITHUB_TOKEN, REPO,
+  MODEL, GITHUB_TOKEN, REPO, DASHBOARD_URL,
   CANDIDATE_COUNT, BEST_COUNT, ALERT_THRESHOLD,
   HISTORY_KEEP_DAYS, CARRIER_SHRINK_TOLERANCE, PROVIDER_RUNS_KEEP, EVENTS_KEEP,
   todayInTz, tierBonus,
@@ -212,7 +212,7 @@ export async function run({ fetchImpl, dbFetch } = {}) {
         }))
         .sort((a, b) => b.grade - a.grade);
 
-  const dashboardUrl = REPO ? `https://${REPO.split("/")[0]}.github.io/${REPO.split("/")[1]}/` : "";
+  const dashboardUrl = DASHBOARD_URL;
   const [notifyResult, emailResult] = await Promise.all([
     notify(newPremium, { token: GITHUB_TOKEN, repo: REPO }),
     sendPremiumEmail(newPremium, { dashboardUrl, threshold: alertThreshold }),

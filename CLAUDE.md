@@ -10,7 +10,7 @@ re-learned the hard way otherwise.
 |---|---|---|
 | Where | root `package.json`, `src/`, `test/` | `web/` |
 | Deps | **zero** — defend this | Next.js + React |
-| Runs on | GitHub Actions, every 30 min | Vercel (Root Directory `web`) |
+| Runs on | GitLab CI schedule, every 30 min | Vercel (Root Directory `web`) |
 | Reads | carrier APIs → Postgres | Postgres, server-side |
 
 Installing one never touches the other. Don't add a dependency to the root package.
@@ -164,26 +164,47 @@ cd web && npx vercel --prod            # deploy
 No `GITHUB_TOKEN` → grading falls back to the deterministic scorer, which is fine for a
 dry run.
 
-## Remotes and deploys
+## Remotes and CI — GitLab is primary
 
-- `origin` fetches from GitHub `AhmadIbrahiim/vf-premium-numbers-alert` and **pushes to
-  both** GitHub and the GitLab mirror (two `pushurl` entries). One `git push` updates
-  both — which matters because **Vercel deploys from GitLab**, so pushing only to GitHub
-  would silently ship nothing.
-- `gitlab` → GitLab `laila.alazap/vf-premium-numbers-alert`, private, over the
-  `gitlab-alt` SSH alias. Kept for explicit single-remote operations.
-- GitHub Actions runs the poller. GitLab has no CI.
-
-If you ever re-add a pushurl, list **both** URLs: as soon as any `pushurl` exists the
-fetch URL stops being used for pushes, so naming one remote silently drops the other.
-
-Never `git push -u gitlab` — that retargets the branch's upstream and later pushes go to
-the mirror alone.
+- `origin` → GitLab `laila.alazap/vf-premium-numbers-alert`, over the `gitlab-alt` SSH
+  alias. All branch upstreams point here. **GitLab runs the poller and Vercel deploys
+  from it.**
+- `github` → the old GitHub repo, kept only as a historical copy. Nothing runs there;
+  its Actions workflow was deleted deliberately (see below).
 
 Two SSH identities resolve differently on gitlab.com: the default key is
 **@AhmadIbrahim**, `~/.ssh/gitlab_alt` is **@laila.alazap**. The `IdentitiesOnly yes`
 line in `~/.ssh/config` is what keeps them apart — without it ssh offers `id_rsa` first
 and GitLab authenticates as the wrong account, which presents as a permissions error.
+
+### The schedule lives in project settings, not in the repo
+
+`.gitlab-ci.yml` defines the `poll` job but **not** when it runs. GitLab keeps cron in
+**Settings → CI/CD → Schedules**: cron `7,37 * * * *`, target branch `main`. Without that
+schedule the poller simply never fires and nothing warns you.
+
+`poll` uses `resource_group: poll` so two polls can never overlap — concurrent runs are
+exactly how the WE IP throttle gets triggered.
+
+### Never re-add a second scheduler
+
+The GitHub Actions workflow was deleted, not disabled, on purpose. Two schedulers
+polling the same carriers doubles the request volume against WE, which throttles by IP
+and takes 2-20 minutes to recover. If GitHub Actions is ever restored, delete the GitLab
+schedule first.
+
+### What leaving GitHub Actions cost
+
+Both are recoverable, and neither breaks a poll:
+
+- **LLM grading.** `src/grade.js` calls GitHub Models, which Actions authenticated for
+  free with its built-in `GITHUB_TOKEN`. On GitLab there is no such token, so grading
+  falls back to the deterministic scorer (which is the designed fallback, not a
+  failure). To restore it, add a GitHub PAT with `models: read` as the `GITHUB_TOKEN`
+  CI/CD variable.
+- **GitHub Issue alerts.** `src/notify.js` needs a token and `GITHUB_REPOSITORY`; off
+  GitHub it returns `skipped-no-credentials` and does nothing. Email alerts via Resend
+  are unaffected and remain the real alerting channel.
 
 ### Vercel needs Root Directory = `web`
 
@@ -202,9 +223,17 @@ None in the repo (`web/.env.example` holds placeholders only). Live values:
 
 | Where | Holds |
 |---|---|
-| GitHub Actions secrets | `DATABASE_URL`, `RESEND_API_KEY`, `ALERT_EMAIL_TO` |
+| GitLab CI/CD variables | `DATABASE_URL`, `RESEND_API_KEY`, `ALERT_EMAIL_TO`, `DASHBOARD_URL`, optionally `GITHUB_TOKEN` |
 | Vercel env | `DATABASE_URL` only |
 | Local | `web/.env.local` (gitignored) |
+
+Mask every one of them, and leave "Protected" **off** unless `main` is a protected
+branch — a protected variable is invisible to pipelines on unprotected branches, which
+looks exactly like the variable not existing.
+
+`DASHBOARD_URL` is the Vercel URL, used for the link in alert emails. It is explicit
+because it is no longer derivable: the old code built a `<owner>.github.io/<repo>` link,
+which now points at the retired Pages site.
 
 ## Shell gotcha
 

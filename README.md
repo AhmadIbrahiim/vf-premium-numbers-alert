@@ -7,8 +7,8 @@ Monitors the public phone-number catalogs of all three Egyptian carriers —
 number for how **premium** its digit pattern is, surfaces the best 30 currently-available
 numbers (refined by an LLM), tracks new arrivals and how long each has been available,
 and shows it all on a dashboard that queries the database live. Everything is in **Neon
-Postgres**; the poller runs in GitHub Actions and the dashboard is a **Next.js app on
-Vercel**.
+Postgres**; the poller runs on a **GitLab CI schedule** and the dashboard is a
+**Next.js app on Vercel**.
 
 The carriers list **~206k** numbers between them, and every one of them silently caps
 how much it will hand over — in a different way. Each cap was verified against the live
@@ -32,8 +32,8 @@ fix it swung 21.9%, which is how that bug was caught).
 
 ## How it works
 
-A scheduled GitHub Actions workflow (`.github/workflows/poll.yml`, best-effort every
-~10 min) runs `src/run.js`, which:
+A scheduled GitLab CI pipeline (`.gitlab-ci.yml`, every 30 min) runs `src/run.js`,
+which:
 
 1. **fetch** — pulls all three catalogs concurrently (static gating headers, no
    cookie/token needed), retrying with backoff on 5xx. A carrier that fails or comes
@@ -95,7 +95,7 @@ request input never reaches the SQL text and row limits are always clamped. It i
 so the repo-root test suite covers it without booting Next.
 
 The poller cannot run on Vercel: a full poll takes 3-5 minutes, past the function
-ceiling. It stays in GitHub Actions and talks to the same database.
+ceiling. It runs on a GitLab CI schedule and talks to the same database.
 
 ### Provider status
 
@@ -107,22 +107,32 @@ a carrier is failing right now.
 
 ## One-time setup
 
-1. Push this repo to GitHub (public).
-2. **Create a Neon project** and set its connection string as a repo secret:
-   `gh secret set DATABASE_URL`. The pipeline refuses to run without it rather than
-   silently losing history. The schema is created on the first run (`db.migrate()`).
-5. **Settings → Actions → General → Workflow permissions:** "Read and write
-   permissions" (lets the workflow open alert issues).
-6. Run the workflow once: **Actions → poll-vf-numbers → Run workflow**. This seeds the
-   baseline (no alerts on the first run).
-7. **Deploy the dashboard:** see [`web/README.md`](web/README.md) — `cd web && npx
-   vercel`, then add `DATABASE_URL` to the Vercel project.
+1. Push the repo to GitLab.
+2. **Create a Neon project** and add its connection string as a CI/CD variable:
+   **Settings → CI/CD → Variables → `DATABASE_URL`** (masked). The pipeline refuses to
+   run without it rather than silently losing history. The schema is created on the
+   first run (`db.migrate()`).
+3. *(optional)* For email alerts add `RESEND_API_KEY` and `ALERT_EMAIL_TO`, plus
+   `DASHBOARD_URL` so the emails link somewhere. Without a verified domain Resend only
+   delivers to the Resend account owner's own address; to reach any other inbox verify a
+   domain at resend.com/domains and set `ALERT_EMAIL_FROM`.
+4. *(optional)* For LLM grading add a GitHub PAT with `models: read` as `GITHUB_TOKEN`.
+   Without it the deterministic scorer is used, which is a designed fallback.
+5. **Create the schedule:** *Settings → CI/CD → Schedules → New schedule*, cron
+   `7,37 * * * *`, target branch `main`. `.gitlab-ci.yml` defines the job but not when
+   it runs — without a schedule the poller never fires.
+6. Run it once from *CI/CD → Pipelines → Run pipeline* to seed the baseline (no alerts
+   on the first run).
+7. **Deploy the dashboard:** see [`web/README.md`](web/README.md). Set Vercel's **Root
+   Directory** to `web` and add `DATABASE_URL`.
 
-`GITHUB_TOKEN` is provided automatically. `DATABASE_URL` is the only required secret.
+Leave CI/CD variables **unprotected** unless `main` is a protected branch — a protected
+variable is invisible to pipelines on unprotected branches, which looks identical to the
+variable not existing.
 
 ## Configuration
 
-Set as workflow `env:` or repo variables (all optional):
+Set as GitLab CI/CD variables or in `.gitlab-ci.yml` (all optional):
 
 | Var | Default | Purpose |
 |---|---|---|
@@ -134,6 +144,7 @@ Set as workflow `env:` or repo variables (all optional):
 | `CANDIDATE_COUNT` | `150` | How many top-scored numbers the LLM ranks |
 | `BEST_COUNT` | `30` | How many to surface |
 | `HISTORY_KEEP_DAYS` | `30` | Delete rows gone longer than this |
+| `DASHBOARD_URL` | — | Vercel URL, used for the link in alert emails |
 | `PROVIDER_RUNS_KEEP` | `500` | Poll history kept per carrier for the status page |
 | `EVENTS_KEEP` | `2000` | NEW/GONE events kept for the change timeline |
 
@@ -154,7 +165,7 @@ Set as workflow `env:` or repo variables (all optional):
 node --test                        # poller + query tests (no dependencies, Node 20+)
 
 # live dry run: no GITHUB_TOKEN -> deterministic grading instead of the LLM.
-# Point DATABASE_URL at a scratch Neon branch, not the one the workflow writes to.
+# Point DATABASE_URL at a scratch Neon branch, not the one the pipeline writes to.
 DATABASE_URL=postgres://... node src/run.js
 
 cd web && npm install && npm run dev   # the dashboard, against the same database
