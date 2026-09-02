@@ -9,7 +9,7 @@ numbers (refined by an LLM), tracks new arrivals and how long each has been avai
 and shows it all on a static dashboard. State lives in **Neon Postgres**; the poller
 runs in GitHub Actions and publishes the dashboard to GitHub Pages — no servers.
 
-The carriers list **~198k** numbers between them, and every one of them silently caps
+The carriers list **~206k** numbers between them, and every one of them silently caps
 how much it will hand over — in a different way. Each cap was verified against the live
 API, and each is worked around:
 
@@ -17,10 +17,10 @@ API, and each is worked around:
 |---|---|---|---|
 | Vodafone | a separate catalog path per line type | pages `red` **and** `flex`, without the `simFamilyType==OWNER` filter | 5.2k |
 | Etisalat | ~1000 numbers per response, whatever you ask for | `searchPattern` takes a fixed-width mask, so each pool is split into 100 disjoint buckets by its last two digits (`011******52`), each well under the cap | 96.3k |
-| WE | 51 numbers per page, 20,000 per query, **and short pages under load** | `fitmod` is a digit mask, so a query that hits the cap is split by fixing one more leading digit (`150???????`), recursively. A short page is re-checked before it is believed | ~101k |
+| WE | 51 numbers per page, 20,000 per query, **and short pages under load** | `fitmod` is a digit mask, so a query that hits the cap is split by fixing one more leading digit (`150???????`), recursively. A short page is re-checked before it is believed | 104.8k |
 
 The caps are the whole story here: queried naively the same three APIs report only
-2.7k / 5.0k / 6.3k — under 8% of what they actually hold.
+2.7k / 5.0k / 6.3k — under 7% of what they actually hold.
 
 Completeness is checked by cross-measuring, not assumed. Vodafone: `red` + `flex` are
 the only line types that exist and 3183 + 2019 is exactly what we store. Etisalat: pool
@@ -62,7 +62,7 @@ A scheduled GitHub Actions workflow (`.github/workflows/poll.yml`, best-effort e
 ### Why Postgres
 
 The state used to be a `history.json` blob, read and rewritten whole every run. At
-~198k numbers that would be 30MB+ committed every poll, which forced the poller to
+~206k numbers that would be 30MB+ committed every poll, which forced the poller to
 track only a slice — so `first_seen` was wrong for most numbers and the per-run diff
 was mostly sampling noise (~370 "new" and ~460 "gone" every run, against a real churn
 of ~30). Postgres tracks every number exactly, with no rewrite churn.
@@ -74,11 +74,11 @@ Served from `gh-pages`, same-origin:
 | File | When | Size | What |
 |---|---|---|---|
 | `latest.json` | on load | ~3.2MB | ranked rows for browsing + the LLM's best 30 |
-| `index.json` | first search | ~3.4MB | **every** available number (`<msisdn><carrier initial><score>`) |
+| `index.json` | first search | ~3.5MB | **every** available number (`<msisdn><carrier initial><score>`) |
 | `best-ever.json` | "best ever" tab | ~3.9MB | top by `best_grade`, available or not |
 | `events.jsonl.json` | on load | ~45KB | recent change timeline |
 
-So browsing shows the top-ranked numbers, and searching digits reaches all ~198k.
+So browsing shows the top-ranked numbers, and searching digits reaches all ~206k.
 
 ## One-time setup
 
@@ -102,7 +102,7 @@ Set as workflow `env:` or repo variables (all optional):
 | Var | Default | Purpose |
 |---|---|---|
 | `MODEL` | `openai/gpt-4o-mini` | GitHub Models model (keep a low tier for daily caps) |
-| `ALERT_THRESHOLD` | `50` | Min score for a NEW number to raise an alert. **Not 90:** the public catalogs top out at 59 across all ~198k numbers (~215 clear 50, ~20 clear 60), so 90 could never fire |
+| `ALERT_THRESHOLD` | `50` | Min score for a NEW number to raise an alert. **Not 90:** the public catalogs top out at 59 across all ~206k numbers (~215 clear 50, ~20 clear 60), so 90 could never fire |
 | `RESEND_API_KEY` | — | Resend key; unset disables email alerts |
 | `ALERT_EMAIL_TO` | — | Alert recipient; unset disables email alerts |
 | `ALERT_EMAIL_FROM` | `onboarding@resend.dev` | Sender. Resend's shared sender only delivers to the Resend account owner — to email anyone else, verify a domain at resend.com/domains and set this to an address on it |
