@@ -7,13 +7,12 @@ import { computeDiff } from "./diff.js";
 import { gradeCandidates } from "./grade.js";
 import { buildCandidates, candidateSignature, gradeCacheValid } from "./store.js";
 import * as db from "./db.js";
-import { buildFallback, writeFallback } from "./publish.js";
 import { notify } from "./notify.js";
 import { sendPremiumEmail } from "./email.js";
 import {
   MODEL, GITHUB_TOKEN, REPO,
   CANDIDATE_COUNT, BEST_COUNT, ALERT_THRESHOLD,
-  HISTORY_KEEP_DAYS, CARRIER_SHRINK_TOLERANCE, PROVIDER_RUNS_KEEP, EVENTS_KEEP, PUBLISH_DIR,
+  HISTORY_KEEP_DAYS, CARRIER_SHRINK_TOLERANCE, PROVIDER_RUNS_KEEP, EVENTS_KEEP,
   todayInTz, tierBonus,
 } from "./config.js";
 
@@ -180,8 +179,8 @@ export async function run({ fetchImpl, dbFetch } = {}) {
   const gradeMap = new Map(bestThirty.map((c) => [c.msisdn, c.grade]));
   await db.applyGrades({ grades: gradeMap }, dbOpts);
 
-  // 7. housekeeping. The dashboard queries Postgres live through the read-only Worker
-  // API, so nothing is published as JSON any more — there is no snapshot to go stale.
+  // 7. housekeeping. Nothing is published: the dashboard is a Next app that queries
+  // these tables itself, so there is no snapshot that could go stale.
   await db.recordNumberEvents({
     newMsisdns: diff.isBaseline ? [] : diff.newMsisdns,
     disappearedMsisdns: diff.disappearedMsisdns,
@@ -189,20 +188,6 @@ export async function run({ fetchImpl, dbFetch } = {}) {
   }, dbOpts);
   const pruned = await db.pruneGone({ keepDays: HISTORY_KEEP_DAYS, today }, dbOpts);
   const counts = await db.readCounts(dbOpts);
-
-  // Fallback snapshot, derived fresh from Postgres. Only the pages that cannot reach
-  // the Data API yet read it; it is never read back by the pipeline.
-  let published = "off";
-  if (PUBLISH_DIR) {
-    try {
-      const payload = await buildFallback({ today, generatedAt }, dbOpts);
-      await writeFallback(PUBLISH_DIR, payload);
-      published = `${payload.snapshot.rows.length} rows`;
-    } catch (err) {
-      // A snapshot failure must not fail a poll: the database already has the truth.
-      published = `failed (${err.message})`;
-    }
-  }
 
   // 8. alerts: NEW numbers scoring at/above the threshold (suppressed on baseline).
   // Drawn from the diff rather than best_thirty — a strong new arrival that the LLM
@@ -244,7 +229,6 @@ export async function run({ fetchImpl, dbFetch } = {}) {
   await summary(
     `✅ run ok | total=${totalElements} available=${counts.available_total} ` +
     `new=${diff.newMsisdns.length} gone=${diff.disappearedMsisdns.length} pruned=${pruned} ` +
-    `snapshot=${published} ` +
     `trusted=${trustedCarriers.join("+") || "none"}` +
     `${failed?.length ? ` failed:${failed.map((f) => f.carrier).join(",")}` : ""} ` +
     `baseline=${diff.isBaseline} llm=${regraded ? "graded" : "cached"} ` +

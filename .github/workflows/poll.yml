@@ -12,7 +12,7 @@ on:
     - cron: "7,37 * * * *"
   push:
     branches: [main]
-    paths: ["web/**", "src/**", ".github/workflows/poll.yml"]
+    paths: ["src/**", ".github/workflows/poll.yml"]
   workflow_dispatch:
     inputs:
       regrade:
@@ -20,14 +20,15 @@ on:
         type: boolean
         default: false
 
-# Never let two runs race the gh-pages push.
+# Never let two polls write the database at once.
 concurrency:
   group: poll
   # Keep the freshest poll if one run stalls and overlaps the next schedule tick.
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  # The dashboard is on Vercel now; this workflow only writes to Postgres and issues.
+  contents: read
   issues: write
   models: read
 
@@ -43,29 +44,13 @@ jobs:
         with:
           node-version: 20
 
-      - name: Prepare gh-pages working copy (public/)
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
-            git fetch origin gh-pages --depth=1
-            git worktree add public origin/gh-pages
-          else
-            git worktree add --detach public
-            git -C public checkout --orphan gh-pages
-            git -C public reset --hard
-            git -C public clean -fdx
-          fi
-
       - name: Run pipeline
         id: run
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          # All state lives in Postgres. PUBLISH_DIR only gets the small fallback
-          # snapshot the dashboard reads until the Data API is switched on.
+          # All state lives in Postgres; the run writes no files at all.
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          PUBLISH_DIR: public
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
           ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }}
@@ -73,20 +58,3 @@ jobs:
           # Manual "Run workflow" with regrade=true forces a full re-evaluation.
           REGRADE: ${{ github.event.inputs.regrade == 'true' && '1' || '0' }}
         run: node src/run.js
-
-      - name: Publish dashboard + snapshot to gh-pages
-        run: |
-          # Retired snapshots from the JSON era; superseded by snapshot.json/status.json.
-          rm -f public/latest.json public/history.json public/best-ever.json \
-                public/index.json public/events.jsonl.json public/grades.json \
-                public/signature.txt public/styles.css
-          cp web/index.html web/status.html web/app.js web/db.js web/config.js web/tailwind.css public/
-          touch public/.nojekyll
-          cd public
-          git add -A
-          if git diff --cached --quiet; then
-            echo "nothing to publish"
-          else
-            git commit -m "data: update $(date -u +%FT%TZ) [skip ci]"
-            git push origin HEAD:gh-pages
-          fi

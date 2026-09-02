@@ -405,8 +405,9 @@ export async function readProviderHistory({ window = 48 } = {}, opts = {}) {
 /**
  * Top `perCarrier` available numbers for each carrier, best score first.
  *
- * Only used to build the offline fallback snapshot (see src/publish.js). Per carrier,
- * not a global top-N, because Etisalat's tier bonus would otherwise crowd Vodafone out.
+ * Per carrier, not a global top-N, because Etisalat's tier bonus would otherwise crowd
+ * Vodafone out entirely. Kept for scripts and debugging; the dashboard queries the
+ * table itself through the Next app.
  */
 export async function readTopPerCarrier({ perCarrier, today }, opts = {}) {
   const rows = await sql(

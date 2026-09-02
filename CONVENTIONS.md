@@ -1,6 +1,9 @@
 # Build conventions (read before writing any module)
 
-This is a **zero-dependency Node.js 20+ project using ES modules**.
+The **poller** (`src/`, `test/`) is a **zero-dependency Node.js 20+ project using ES
+modules** — that constraint still holds and should be defended. The **dashboard**
+(`web/`) is a separate package: a Next.js app with React, deployed to Vercel. Installing
+one never affects the other.
 
 ## Hard rules
 - ES modules only: `import`/`export`, never `require`. Files end in `.js`.

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { buildQuery, MAX_LIMIT, CARRIERS } from "../worker/api.js";
+import { buildQuery, MAX_LIMIT, CARRIERS } from "../web/lib/queries.js";
 
 /** buildQuery accepts URLSearchParams in production; a plain object is equivalent. */
 const q = (route, params) => buildQuery(route, new URLSearchParams(params));
@@ -117,11 +117,10 @@ test("buildQuery also accepts a plain object, not just URLSearchParams", () => {
   assert.ok(viaObject.params.includes(5));
 });
 
-test("the worker source stays safe to inline into the deploy call", async () => {
-  // It is uploaded by embedding this file inside a JS template literal, so a backtick,
-  // a dollar-brace or a backslash escape would be silently mangled in the deployed copy.
-  const src = await readFile(new URL("../worker/api.js", import.meta.url), "utf8");
-  assert.ok(!src.includes("`"), "no backticks");
-  assert.ok(!src.includes("${"), "no dollar-brace");
-  assert.ok(!src.includes("\\"), "no backslashes");
+test("the query module stays free of server-only imports", async () => {
+  // It runs in the Next server runtime and in plain Node under test, so it must not
+  // reach for `process.env`, a database client, or anything Next-specific.
+  const src = await readFile(new URL("../web/lib/queries.js", import.meta.url), "utf8");
+  assert.ok(!/\bprocess\.env\b/.test(src), "no environment access");
+  assert.ok(!/\bimport\b/.test(src), "no imports at all");
 });

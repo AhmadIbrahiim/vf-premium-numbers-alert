@@ -1,26 +1,13 @@
 /**
- * worker/api.js - read-only HTTP API over the numbers database.
+ * queries.js — every database query the dashboard can run, as parameterised SQL.
  *
- * The dashboard is a static page on GitHub Pages, so it cannot reach Postgres directly,
- * and a database credential must never sit in a public page. This Worker is the smallest
- * thing that closes that gap: the connection string stays a server-side secret and the
- * client can only ask for one of a fixed set of queries.
+ * The route handlers never build SQL from request input. `buildQuery` maps a route name
+ * plus validated params onto a fixed statement with bound parameters, and rejects
+ * anything it does not recognise. Row limits are clamped so no single request can drain
+ * the table.
  *
- * Security posture:
- *  - No SQL comes from the client. buildQuery maps a route name + validated params onto
- *    a fixed statement with bound parameters; anything unrecognised is rejected.
- *  - Reads only, and only the numbers / provider_runs / number_events tables.
- *  - Row limits are clamped, so no single request can drain the table.
- *  - The data is the carriers' own public listings, already public on their shops.
- *
- * buildQuery is exported apart from the handler so it can be unit-tested in plain Node
- * with no Cloudflare runtime (see test/api.test.js).
- *
- * STYLE NOTE: this file deliberately contains no template literals and no backslashes.
- * It is deployed by inlining its source into a Cloudflare API call that wraps it in
- * backticks, where a backtick, a dollar-brace or an escape sequence would be mangled.
- * Plain quotes, string concatenation, and character classes instead of shorthand
- * regex escapes. The test suite asserts this invariant (see test/api.test.js).
+ * Pure and runtime-free on purpose, so it is unit-tested directly in Node
+ * (test/queries.test.js) without booting Next.
  */
 
 /** Hard ceiling on rows per request, whatever the client asks for. */
@@ -182,81 +169,3 @@ export function buildQuery(route, params) {
 
   throw new Error("unknown route");
 }
-
-/** Neon's SQL-over-HTTP endpoint for a connection string. */
-function sqlUrl(connectionString) {
-  return "https://" + new URL(connectionString).host + "/sql";
-}
-
-/** CORS headers. The origin is echoed only when allowed, never blanket-wildcarded. */
-function corsHeaders(origin, allowed) {
-  const ok = allowed.indexOf("*") !== -1 || allowed.indexOf(origin) !== -1;
-  return {
-    "access-control-allow-origin": ok ? origin || "*" : allowed[0] || "*",
-    "access-control-allow-methods": "GET, OPTIONS",
-    "access-control-allow-headers": "content-type",
-    "access-control-max-age": "86400",
-    vary: "Origin",
-  };
-}
-
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    const allowed = (env.ALLOWED_ORIGINS || "*").split(",").map(function (s) {
-      return s.trim();
-    });
-    const cors = corsHeaders(request.headers.get("origin"), allowed);
-
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: cors });
-    }
-    if (request.method !== "GET") {
-      return Response.json({ error: "method not allowed" }, { status: 405, headers: cors });
-    }
-
-    // First non-empty path segment, so "/status", "status" and "/status/" all match.
-    const route = url.pathname.split("/").filter(Boolean)[0] || "counts";
-    if (route === "health") {
-      return Response.json({ ok: true, routes: ["counts", "numbers", "numbers_count", "status", "history", "events"] }, { headers: cors });
-    }
-
-    let query;
-    try {
-      query = buildQuery(route, url.searchParams);
-    } catch (err) {
-      return Response.json({ error: err.message }, { status: 400, headers: cors });
-    }
-
-    if (!env.DATABASE_URL) {
-      return Response.json({ error: "not configured" }, { status: 500, headers: cors });
-    }
-
-    try {
-      const res = await fetch(sqlUrl(env.DATABASE_URL), {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "neon-connection-string": env.DATABASE_URL,
-        },
-        body: JSON.stringify({ query: query.sql, params: query.params }),
-      });
-      const body = await res.json().catch(function () {
-        return null;
-      });
-      if (!res.ok) {
-        // Never echo the upstream detail: it can carry the connection string.
-        console.log("neon error", res.status, body && body.message);
-        return Response.json({ error: "query failed" }, { status: 502, headers: cors });
-      }
-      const headers = Object.assign({}, cors, {
-        "content-type": "application/json",
-        "cache-control": "public, max-age=" + query.maxAge + ", stale-while-revalidate=120",
-      });
-      return Response.json({ rows: (body && body.rows) || [] }, { headers: headers });
-    } catch (err) {
-      console.log("worker error", err && err.message);
-      return Response.json({ error: "upstream unavailable" }, { status: 502, headers: cors });
-    }
-  },
-};

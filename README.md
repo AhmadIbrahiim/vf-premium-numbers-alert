@@ -7,8 +7,8 @@ Monitors the public phone-number catalogs of all three Egyptian carriers —
 number for how **premium** its digit pattern is, surfaces the best 30 currently-available
 numbers (refined by an LLM), tracks new arrivals and how long each has been available,
 and shows it all on a dashboard that queries the database live. Everything is in **Neon
-Postgres**; the poller runs in GitHub Actions and the dashboard is a static page on
-GitHub Pages — no servers of our own.
+Postgres**; the poller runs in GitHub Actions and the dashboard is a **Next.js app on
+Vercel**.
 
 The carriers list **~206k** numbers between them, and every one of them silently caps
 how much it will hand over — in a different way. Each cap was verified against the live
@@ -51,13 +51,12 @@ A scheduled GitHub Actions workflow (`.github/workflows/poll.yml`, best-effort e
    (free, authed by the built-in `GITHUB_TOKEN`) for a best-30 ranking with reasons.
    On any failure it falls back to the deterministic ranking.
 6. **record** — writes the NEW/GONE events and the per-carrier poll telemetry, then
-   deletes rows gone longer than `HISTORY_KEEP_DAYS`, and (if `PUBLISH_DIR` is set)
-   rebuilds the small fallback snapshot from the database.
+   deletes rows gone longer than `HISTORY_KEEP_DAYS`.
 7. **alert** — when a NEW number scores ≥ `ALERT_THRESHOLD` it opens/comments a GitHub
    Issue and, if `RESEND_API_KEY` + `ALERT_EMAIL_TO` are set, emails the details. Both
    are best-effort: a failed alert is logged and never fails the poll or loses data.
 
-A scheduled poll writes to Postgres and refreshes the fallback snapshot; that is all.
+A poll writes to Postgres and nothing else — no files, no branches, no snapshots.
 
 ### Why Postgres, and why no JSON
 
@@ -78,34 +77,33 @@ dashboard reads them live:
 | `number_events` | recent NEW / GONE events, for the change timeline |
 | `meta` | pipeline internals (grade cache, signature). **Not** exposed to the dashboard |
 
-### How a static page reads Postgres
+### How the dashboard reads Postgres
 
-Preferred: Neon's **Data API** (PostgREST). `web/db.js` is the only place that talks to
-it, `web/config.js` holds the endpoint, and `db/grants.sql` restricts the anonymous role
-to `SELECT` on the three public tables with row-level security and a 5s statement
-timeout. A database credential never reaches the browser. Filtering, sorting and paging
-happen in Postgres, so a search covers the entire ~206k catalogue and "Load more" is a
-real query.
+The dashboard (`web/`) is a Next.js app on Vercel. Pages and route handlers run on the
+server, so `DATABASE_URL` stays a private environment variable and no database
+credential reaches the browser. Filtering, sorting and paging happen in Postgres, so a
+search covers the entire ~206k catalogue and "Load more" is a real query.
 
-Enabling the Data API is a one-time console toggle, though, and until it is done a
-static page has nothing to query at all. So the poller also derives two small files from
-Postgres each run — `snapshot.json` (~1.8MB: the top 3,000 per carrier, the counts and
-the recent events) and `status.json` — and `web/db.js` serves from them when no endpoint
-is configured. Those are a **cache, not state**: nothing reads them back, and the pages
-say "from the latest poll" and "searched the top 9,000 of 205,263" so the narrower scope
-is never mistaken for the whole catalogue. Set `base` in `web/config.js` and everything
-switches to live queries with no other change.
+This is why it is not on GitHub Pages any more. A static host has no server, which left
+only bad options: publish the database behind a public read-only endpoint, or publish a
+JSON snapshot that is stale the moment it is written. Both were built and both were
+worse. One server-side render removes the whole problem.
 
-`worker/api.js` is a third option: a Cloudflare Worker that keeps the connection string
-server-side and accepts only whitelisted queries. Tighter than exposing tables directly,
-but it needs a Cloudflare deploy.
+`web/lib/queries.js` is the only place SQL is written. Route handlers hand request
+params to `buildQuery`, which validates them against a whitelist and binds them, so
+request input never reaches the SQL text and row limits are always clamped. It is pure,
+so the repo-root test suite covers it without booting Next.
+
+The poller cannot run on Vercel: a full poll takes 3-5 minutes, past the function
+ceiling. It stays in GitHub Actions and talks to the same database.
 
 ### Provider status
 
-`status.html` is a live health view per carrier: state (live / carried over / failing),
+`/status` is a live health view per carrier: state (live / carried over / failing),
 numbers collected, requests used, poll duration, success rate over the recent window, a
-sparkline of inventory, the last error, and a table of recent polls. It reads
-`provider_runs` directly and refreshes itself.
+sparkline of inventory, the last error, and a table of recent polls. Server-rendered on
+every request from `provider_runs`, because the point of the page is telling you whether
+a carrier is failing right now.
 
 ## One-time setup
 
@@ -113,12 +111,12 @@ sparkline of inventory, the last error, and a table of recent polls. It reads
 2. **Create a Neon project** and set its connection string as a repo secret:
    `gh secret set DATABASE_URL`. The pipeline refuses to run without it rather than
    silently losing history. The schema is created on the first run (`db.migrate()`).
-6. **Settings → Actions → General → Workflow permissions:** "Read and write
-   permissions" (lets the workflow push to `gh-pages` and open issues).
-7. Run the workflow once: **Actions → poll-vf-numbers → Run workflow**. This seeds the
-   baseline (no alerts on the first run) and creates the `gh-pages` branch.
-8. **Settings → Pages:** source = branch `gh-pages`, folder `/ (root)`.
-9. Visit `https://<you>.github.io/<repo>/`.
+5. **Settings → Actions → General → Workflow permissions:** "Read and write
+   permissions" (lets the workflow open alert issues).
+6. Run the workflow once: **Actions → poll-vf-numbers → Run workflow**. This seeds the
+   baseline (no alerts on the first run).
+7. **Deploy the dashboard:** see [`web/README.md`](web/README.md) — `cd web && npx
+   vercel`, then add `DATABASE_URL` to the Vercel project.
 
 `GITHUB_TOKEN` is provided automatically. `DATABASE_URL` is the only required secret.
 
@@ -138,8 +136,7 @@ Set as workflow `env:` or repo variables (all optional):
 | `HISTORY_KEEP_DAYS` | `30` | Delete rows gone longer than this |
 | `PROVIDER_RUNS_KEEP` | `500` | Poll history kept per carrier for the status page |
 | `EVENTS_KEEP` | `2000` | NEW/GONE events kept for the change timeline |
-| `PUBLISH_DIR` | — | Where to write the fallback snapshot; unset writes nothing |
-| `FALLBACK_PER_CARRIER` | `3000` | Rows per carrier in the fallback snapshot |
+
 | `VF_TYPES` | `red,flex` | Vodafone line-type catalog paths to page |
 | `ETISALAT_SUFFIX_DIGITS` | `2` | Trailing digits fixed per bucket (2 → 100 buckets/pool) |
 | `ETISALAT_MAX_SUFFIX_DIGITS` | `6` | Most digits fixed when splitting a capped bucket |
@@ -151,28 +148,21 @@ Set as workflow `env:` or repo variables (all optional):
 | `WE_MAX_HICCUPS` | `25` | Spurious short pages to ride out per branch before reporting it incomplete |
 | `CARRIER_SHRINK_TOLERANCE` | `0.9` | A carrier returning less than this fraction of what the DB holds is treated as partial: refreshed, but nothing retired |
 
-## Dashboard CSS
-
-The dashboard uses a **precompiled** Tailwind stylesheet (`web/tailwind.css`, committed) —
-no runtime CDN. Rebuild it after changing classes in `web/index.html` or `web/app.js`:
-
-```bash
-# one-off: grab the standalone CLI (no npm needed)
-curl -sL -o /tmp/tw https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-macos-arm64 && chmod +x /tmp/tw
-/tmp/tw -c tailwind.config.js -i web/input.css -o web/tailwind.css --minify
-```
-
 ## Local development
 
 ```bash
-node --test                        # all unit tests (zero dependencies, Node 20+)
+node --test                        # poller + query tests (no dependencies, Node 20+)
 
 # live dry run: no GITHUB_TOKEN -> deterministic grading instead of the LLM.
 # Point DATABASE_URL at a scratch Neon branch, not the one the workflow writes to.
 DATABASE_URL=postgres://... node src/run.js
 
-cd web && python3 -m http.server   # preview the dashboard against your Data API
+cd web && npm install && npm run dev   # the dashboard, against the same database
 ```
+
+The poller has **no dependencies** — it is the root `package.json`, and `node --test`
+runs against plain Node. The dashboard is its own package under `web/` with Next and
+React, so installing it never touches the poller.
 
 The test suite needs no database: `test/helpers/fake-db.js` is an in-memory stand-in
 for Neon's SQL-over-HTTP endpoint.
