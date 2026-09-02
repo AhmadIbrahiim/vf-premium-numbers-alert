@@ -51,6 +51,13 @@ export const PROVIDER_RUNS_KEEP = intEnv("PROVIDER_RUNS_KEEP", 500);
 /** NEW/GONE events kept for the dashboard's change timeline. */
 export const EVENTS_KEEP = intEnv("EVENTS_KEEP", 2000);
 
+/**
+ * Where the fallback snapshot is written (the gh-pages working copy in CI). The
+ * dashboard only reads it while the Data API is unconfigured — see src/publish.js.
+ * Empty disables writing it.
+ */
+export const PUBLISH_DIR = process.env.PUBLISH_DIR ?? "";
+
 /** Delete rows gone for longer than this, so the table doesn't grow without bound. */
 export const HISTORY_KEEP_DAYS = intEnv("HISTORY_KEEP_DAYS", 30);
 

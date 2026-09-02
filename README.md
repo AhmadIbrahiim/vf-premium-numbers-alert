@@ -51,14 +51,13 @@ A scheduled GitHub Actions workflow (`.github/workflows/poll.yml`, best-effort e
    (free, authed by the built-in `GITHUB_TOKEN`) for a best-30 ranking with reasons.
    On any failure it falls back to the deterministic ranking.
 6. **record** — writes the NEW/GONE events and the per-carrier poll telemetry, then
-   deletes rows gone longer than `HISTORY_KEEP_DAYS`. Nothing is published: the
-   dashboard queries these tables itself.
+   deletes rows gone longer than `HISTORY_KEEP_DAYS`, and (if `PUBLISH_DIR` is set)
+   rebuilds the small fallback snapshot from the database.
 7. **alert** — when a NEW number scores ≥ `ALERT_THRESHOLD` it opens/comments a GitHub
    Issue and, if `RESEND_API_KEY` + `ALERT_EMAIL_TO` are set, emails the details. Both
    are best-effort: a failed alert is logged and never fails the poll or loses data.
 
-A scheduled poll touches nothing but the database. `gh-pages` is republished only when
-the dashboard's own files change.
+A scheduled poll writes to Postgres and refreshes the fallback snapshot; that is all.
 
 ### Why Postgres, and why no JSON
 
@@ -81,18 +80,25 @@ dashboard reads them live:
 
 ### How a static page reads Postgres
 
-Through Neon's **Data API** (PostgREST). `web/db.js` is the only place that talks to it,
-`web/config.js` holds the endpoint, and `db/grants.sql` restricts the anonymous role to
-`SELECT` on the three public tables with row-level security and a 5s statement timeout.
-A database credential never reaches the browser.
+Preferred: Neon's **Data API** (PostgREST). `web/db.js` is the only place that talks to
+it, `web/config.js` holds the endpoint, and `db/grants.sql` restricts the anonymous role
+to `SELECT` on the three public tables with row-level security and a 5s statement
+timeout. A database credential never reaches the browser. Filtering, sorting and paging
+happen in Postgres, so a search covers the entire ~206k catalogue and "Load more" is a
+real query.
 
-Because filtering, sorting and paging happen in Postgres, a search covers the entire
-~206k catalogue rather than a pre-computed slice, and "Load more" is a real query.
+Enabling the Data API is a one-time console toggle, though, and until it is done a
+static page has nothing to query at all. So the poller also derives two small files from
+Postgres each run — `snapshot.json` (~1.8MB: the top 3,000 per carrier, the counts and
+the recent events) and `status.json` — and `web/db.js` serves from them when no endpoint
+is configured. Those are a **cache, not state**: nothing reads them back, and the pages
+say "from the latest poll" and "searched the top 9,000 of 205,263" so the narrower scope
+is never mistaken for the whole catalogue. Set `base` in `web/config.js` and everything
+switches to live queries with no other change.
 
-`worker/api.js` is an alternative: a Cloudflare Worker that keeps the connection string
-server-side and exposes only whitelisted queries. Use it instead of the Data API if you
-would rather not expose the tables directly — the dashboard needs `web/db.js` pointed at
-it, and it is the tighter option because the client cannot compose its own filters.
+`worker/api.js` is a third option: a Cloudflare Worker that keeps the connection string
+server-side and accepts only whitelisted queries. Tighter than exposing tables directly,
+but it needs a Cloudflare deploy.
 
 ### Provider status
 
@@ -132,6 +138,8 @@ Set as workflow `env:` or repo variables (all optional):
 | `HISTORY_KEEP_DAYS` | `30` | Delete rows gone longer than this |
 | `PROVIDER_RUNS_KEEP` | `500` | Poll history kept per carrier for the status page |
 | `EVENTS_KEEP` | `2000` | NEW/GONE events kept for the change timeline |
+| `PUBLISH_DIR` | — | Where to write the fallback snapshot; unset writes nothing |
+| `FALLBACK_PER_CARRIER` | `3000` | Rows per carrier in the fallback snapshot |
 | `VF_TYPES` | `red,flex` | Vodafone line-type catalog paths to page |
 | `ETISALAT_SUFFIX_DIGITS` | `2` | Trailing digits fixed per bucket (2 → 100 buckets/pool) |
 | `ETISALAT_MAX_SUFFIX_DIGITS` | `6` | Most digits fixed when splitting a capped bucket |

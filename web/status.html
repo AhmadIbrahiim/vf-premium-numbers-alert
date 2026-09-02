@@ -127,7 +127,7 @@
 
 <script src="./config.js"></script>
 <script type="module">
-import { fetchProviderRuns, isConfigured } from "./db.js";
+import { fetchProviderRuns, isFallback } from "./db.js";
 
 const CARRIER_LABEL = { vodafone: "Vodafone", etisalat: "Etisalat", we: "WE" };
 const $ = (id) => document.getElementById(id);
@@ -211,7 +211,8 @@ function render(runs) {
   });
 
   $("sub").textContent =
-    "Read live from Postgres · last poll " + (latestAll ? relTime(latestAll.run_at) : "unknown");
+    (isFallback() ? "From the latest poll" : "Read live from Postgres") +
+    " · last poll " + (latestAll ? relTime(latestAll.run_at) : "unknown");
 
   const summaryPairs = [
     ["Providers healthy", carriers.length - failing.length + " / " + carriers.length],
@@ -340,17 +341,6 @@ function render(runs) {
 }
 
 async function load() {
-  if (!isConfigured()) {
-    showNotice("Not connected to the database yet", [
-      "<p>This page reads Postgres live, which needs the Neon Data API switched on.</p>",
-      "<ol>",
-      "<li>Neon console → your project → <strong>Data API</strong> → Enable.</li>",
-      "<li>Copy the REST endpoint it shows you.</li>",
-      "<li>Put it in <code>web/config.js</code> as <code>base</code>.</li>",
-      "</ol>",
-    ].join(""));
-    return;
-  }
   try {
     const runs = await fetchProviderRuns(window.VF_CONFIG?.statusWindow || 48);
     if (!runs.length) {
@@ -359,8 +349,9 @@ async function load() {
     }
     render(runs);
   } catch (err) {
-    showNotice("Couldn't reach the database", "<p></p>");
-    $("notice").querySelector("p").textContent = String(err.message || err);
+    showNotice("No provider data yet", "<p></p>");
+    $("notice").querySelector("p").textContent =
+      "Neither the published snapshot nor the Data API could be reached: " + String(err.message || err);
   }
 }
 

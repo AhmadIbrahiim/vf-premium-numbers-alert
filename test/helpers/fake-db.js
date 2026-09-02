@@ -141,6 +141,33 @@ export function fakeDb(seed = {}) {
       return reply([]); // pruning is not what these tests are about
     }
 
+    // readTopPerCarrier: per-carrier ranking by score, for the fallback snapshot.
+    if (query.includes("partition by carrier order by score desc")) {
+      const [perCarrier, today] = params;
+      const perC = new Map();
+      return reply(
+        [...rows.values()]
+          .filter((r) => r.available)
+          .sort((a, b) => b.score - a.score || a.msisdn.localeCompare(b.msisdn))
+          .filter((r) => {
+            const n = (perC.get(r.carrier) || 0) + 1;
+            perC.set(r.carrier, n);
+            return n <= perCarrier;
+          })
+          .map((r) => ({
+            msisdn: r.msisdn, score: r.score, best_grade: r.best_grade, tags: r.tags,
+            sim_type: r.sim_type, carrier: r.carrier, tier: r.tier, available: r.available,
+            first_seen: r.first_seen, age_days: dayDiff(r.first_seen, today),
+            is_new: r.first_seen === today,
+          }))
+      );
+    }
+
+    if (query.includes("from number_events order by")) {
+      const [limit] = params;
+      return reply(events.slice(-limit).reverse());
+    }
+
     throw new Error("fake-db: unhandled query: " + query.slice(0, 120));
   }
 

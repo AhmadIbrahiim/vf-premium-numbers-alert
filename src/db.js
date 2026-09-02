@@ -402,6 +402,40 @@ export async function readProviderHistory({ window = 48 } = {}, opts = {}) {
   );
 }
 
+/**
+ * Top `perCarrier` available numbers for each carrier, best score first.
+ *
+ * Only used to build the offline fallback snapshot (see src/publish.js). Per carrier,
+ * not a global top-N, because Etisalat's tier bonus would otherwise crowd Vodafone out.
+ */
+export async function readTopPerCarrier({ perCarrier, today }, opts = {}) {
+  const rows = await sql(
+    `select msisdn, score, best_grade, tags, sim_type, carrier, tier, available,
+            to_char(first_seen, 'YYYY-MM-DD') as first_seen,
+            ($2::date - first_seen) as age_days,
+            first_seen = $2::date as is_new
+     from (
+       select *, row_number() over (partition by carrier order by score desc, msisdn) as rn
+       from numbers where available
+     ) ranked
+     where rn <= $1
+     order by score desc, msisdn`,
+    [perCarrier, today],
+    opts
+  );
+  return rows.map((r) => ({ ...r, tags: tagList(r.tags) }));
+}
+
+/** Recent NEW/GONE events, newest first. */
+export async function readEvents({ limit = 300 } = {}, opts = {}) {
+  return sql(
+    `select ts, day, type, msisdn, carrier, score
+     from number_events order by ts desc, id desc limit $1`,
+    [limit],
+    opts
+  );
+}
+
 /** Headline counts for the dashboard: total available, and the per-carrier split. */
 export async function readCounts(opts = {}) {
   const rows = await sql(

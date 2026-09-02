@@ -43,25 +43,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: Run pipeline
-        id: run
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          # All state lives in Postgres; the run writes no files at all.
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
-          ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }}
-          MODEL: openai/gpt-4o-mini
-          # Manual "Run workflow" with regrade=true forces a full re-evaluation.
-          REGRADE: ${{ github.event.inputs.regrade == 'true' && '1' || '0' }}
-        run: node src/run.js
-
-      # The dashboard is static and reads Postgres directly, so it only needs
-      # republishing when its own files change — never on a scheduled poll.
-      - name: Publish dashboard to gh-pages
-        if: github.event_name != 'schedule'
+      - name: Prepare gh-pages working copy (public/)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -74,8 +56,27 @@ jobs:
             git -C public reset --hard
             git -C public clean -fdx
           fi
-          # Drop the JSON snapshots the dashboard used to download; they are superseded
-          # by live queries and would otherwise sit there stale forever.
+
+      - name: Run pipeline
+        id: run
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          # All state lives in Postgres. PUBLISH_DIR only gets the small fallback
+          # snapshot the dashboard reads until the Data API is switched on.
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PUBLISH_DIR: public
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+          ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }}
+          MODEL: openai/gpt-4o-mini
+          # Manual "Run workflow" with regrade=true forces a full re-evaluation.
+          REGRADE: ${{ github.event.inputs.regrade == 'true' && '1' || '0' }}
+        run: node src/run.js
+
+      - name: Publish dashboard + snapshot to gh-pages
+        run: |
+          # Retired snapshots from the JSON era; superseded by snapshot.json/status.json.
           rm -f public/latest.json public/history.json public/best-ever.json \
                 public/index.json public/events.jsonl.json public/grades.json \
                 public/signature.txt public/styles.css
@@ -84,8 +85,8 @@ jobs:
           cd public
           git add -A
           if git diff --cached --quiet; then
-            echo "dashboard unchanged"
+            echo "nothing to publish"
           else
-            git commit -m "dashboard: update $(date -u +%FT%TZ) [skip ci]"
+            git commit -m "data: update $(date -u +%FT%TZ) [skip ci]"
             git push origin HEAD:gh-pages
           fi

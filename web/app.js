@@ -11,12 +11,13 @@
  * XSS-safe: all dynamic text goes through textContent; innerHTML only for static SVG.
  */
 
-import { fetchNumbers, fetchCounts, fetchEvents, isConfigured, NotConfiguredError } from "./db.js";
+import { fetchNumbers, fetchCounts, fetchEvents, fetchScope, isFallback, NotConfiguredError } from "./db.js";
 
 const state = {
   rows: [],          // the page of numbers currently rendered
   total: null,       // matching rows in the database, for the count line
   counts: null,      // available-per-carrier headline
+  scope: null,       // whether we are reading live or from the snapshot
   events: null,      // recent NEW/GONE events
   view: "now",       // "now" | "ever" | "changes"
   filter: "",
@@ -252,6 +253,17 @@ async function loadNumbers({ append = false } = {}) {
   }
 }
 
+/** Whether we are reading the database live or the published snapshot. */
+async function loadScope() {
+  try {
+    state.scope = await fetchScope();
+  } catch {
+    state.scope = null;
+  }
+  renderHeader();
+  render();
+}
+
 /** Headline per-carrier counts, shown in the header. */
 async function loadCounts() {
   try {
@@ -322,7 +334,9 @@ function changesTimeline() {
 function renderHeader() {
   if (state.notConfigured) { $("updated").textContent = "not connected"; return; }
   if (state.error) { $("updated").textContent = "data unavailable"; return; }
-  $("updated").textContent = state.loading && !state.counts ? "loading…" : "live from the database";
+  $("updated").textContent = state.loading && !state.counts
+    ? "loading…"
+    : (state.scope?.live === false ? "from the latest poll" : "live from the database");
   if (state.counts) {
     $("stat-total").textContent = (state.counts.available_total ?? 0).toLocaleString();
     const byCarrier = state.counts.by_carrier || {};
@@ -425,8 +439,16 @@ function renderCount(total, filtered, rendered = total) {
   const base = dbTotal !== null && dbTotal > rendered
     ? `${rendered.toLocaleString()} of ${dbTotal.toLocaleString()} number${dbTotal === 1 ? "" : "s"}`
     : `${rendered.toLocaleString()} number${rendered === 1 ? "" : "s"}`;
-  // Every query runs against the whole table, so a search is never limited to a slice.
-  const scope = filtered ? " · searched the whole catalogue" : "";
+  // Be explicit about what a search actually covered: the whole table when reading the
+  // database live, or only the published rows when falling back to the snapshot.
+  let scope = "";
+  if (filtered) {
+    scope = state.scope?.live === false
+      ? ` · searched the top ${(state.scope.searchable ?? 0).toLocaleString()} of ${(state.scope.total ?? 0).toLocaleString()}`
+      : " · searched the whole catalogue";
+  } else if (state.scope?.live === false) {
+    scope = ` · top ${(state.scope.searchable ?? 0).toLocaleString()} of ${(state.scope.total ?? 0).toLocaleString()}`;
+  }
   $("count").textContent = base + scope + (state.loading ? " · loading…" : "");
 }
 
@@ -506,8 +528,8 @@ function render() {
   if (state.notConfigured) {
     podiumEl.classList.add("hidden");
     showEmpty(
-      "Not connected to the database",
-      "Enable the Data API on the Neon project and set its URL in web/config.js."
+      "No data available",
+      "Neither the published snapshot nor the Data API could be reached. The next poll republishes the snapshot."
     );
     $("count").textContent = "";
     return;
@@ -603,15 +625,9 @@ function wire() {
   });
   $("theme").addEventListener("click", toggleTheme);
 
-  if (!isConfigured()) {
-    state.notConfigured = true;
-    renderHeader();
-    render();
-    return;
-  }
-
   skeleton();
   setView("now");
+  loadScope();
   loadCounts();
   loadEvents();
   // Re-read the headline periodically; the poller writes every 30 min.

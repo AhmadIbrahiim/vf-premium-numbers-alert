@@ -81,8 +81,11 @@ test("run merges all three carriers into Postgres; WE gets no bonus", async () =
     // The LLM grade cache lives in the meta table, not a file.
     assert.ok(fake.meta.has("grades"));
     assert.ok(fake.meta.has("signature"));
-    await assert.rejects(() => readFile(join(dir, "latest.json"), "utf8"), "no latest.json is written");
+    // No state files: the grade cache and signature are rows, not JSON on disk.
     await assert.rejects(() => readFile(join(dir, "grades.json"), "utf8"), "no grades.json is written");
+    await assert.rejects(() => readFile(join(dir, "signature.txt"), "utf8"), "no signature.txt is written");
+    // And with PUBLISH_DIR unset, not even the fallback snapshot is produced.
+    await assert.rejects(() => readFile(join(dir, "snapshot.json"), "utf8"), "no snapshot without PUBLISH_DIR");
 
   } finally {
     await rm(dir, { recursive: true, force: true });

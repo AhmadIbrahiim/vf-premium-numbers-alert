@@ -162,3 +162,24 @@ test("readAvailable can be scoped to the carriers a run actually fetched", async
   assert.deepEqual((await db.readAvailable(opts(fake))).sort(), ROWS.map((r) => r.msisdn).sort());
   assert.deepEqual(await db.readAvailable(opts(fake), { carriers: ["we"] }), ["01512345678"]);
 });
+
+test("readTopPerCarrier gives each carrier its own slice for the fallback snapshot", async () => {
+  const fake = fakeDb();
+  const et = Array.from({ length: 5 }, (_, i) => ({
+    msisdn: `0110000000${i}`, carrier: "etisalat", tier: "", sim_type: "", score: 90, tags: [],
+  }));
+  const vf = Array.from({ length: 2 }, (_, i) => ({
+    msisdn: `0100000000${i}`, carrier: "vodafone", tier: "", sim_type: "", score: 5, tags: [],
+  }));
+  await db.upsertNumbers({ rows: [...et, ...vf], today: "2026-09-02", runSeq: 1 }, opts(fake));
+  const rows = await db.readTopPerCarrier({ perCarrier: 2, today: "2026-09-02" }, opts(fake));
+  assert.equal(rows.filter((r) => r.carrier === "etisalat").length, 2);
+  assert.equal(rows.filter((r) => r.carrier === "vodafone").length, 2, "Vodafone is not crowded out");
+});
+
+test("readEvents returns the newest events first", async () => {
+  const fake = fakeDb();
+  const rows = await db.readEvents({ limit: 5 }, opts(fake));
+  assert.deepEqual(rows, []); // none recorded in this fake
+  assert.ok(fake.queries.some((q) => /from number_events/.test(q)));
+});
