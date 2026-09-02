@@ -75,27 +75,6 @@ test("upsertNumbers inserts, then keeps first_seen and only raises best_grade", 
   assert.equal(r.best_grade, 40);
 });
 
-test("upsertNumbers round-trips tags, including an empty list", async () => {
-  const fake = fakeDb();
-  await db.upsertNumbers({ rows: ROWS, today: "2026-09-02", runSeq: 1 }, opts(fake));
-  const rows = await db.readPublishRows({ perCarrier: 10, today: "2026-09-02" }, opts(fake));
-  const byId = Object.fromEntries(rows.map((r) => [r.msisdn, r]));
-  assert.deepEqual(byId["01012345678"].tags, ["a", "b"]);
-  // Neon decodes an empty text[] as [""] over HTTP; it must come back as a real [].
-  assert.deepEqual(byId["01112345678"].tags, []);
-});
-
-test("readPublishRows drops the [''] Neon returns for an empty array", async () => {
-  const fake = fakeDb();
-  fake.rows.set("01100000001", {
-    msisdn: "01100000001", carrier: "etisalat", tier: "", sim_type: "", score: 10,
-    tags: [""], best_grade: 10, first_seen: "2026-09-02", last_seen: "2026-09-02",
-    available: true, run_seq: 1,
-  });
-  const [row] = await db.readPublishRows({ perCarrier: 10, today: "2026-09-02" }, opts(fake));
-  assert.deepEqual(row.tags, []);
-});
-
 test("markGone flags exactly the rows this run did not touch", async () => {
   const fake = fakeDb();
   await db.upsertNumbers({ rows: ROWS, today: "2026-09-02", runSeq: 1 }, opts(fake));
@@ -137,78 +116,6 @@ test("pruneGone keeps recently-gone rows and every available row", async () => {
   await db.markGone({ runSeq: 2, carriers: ALL_CARRIERS }, opts(fake));
   assert.equal(await db.pruneGone({ keepDays: 30, today: "2026-09-02" }, opts(fake)), 0);
   assert.equal(fake.rows.size, 3);
-});
-
-test("readPublishRows caps per carrier so a small catalog is not crowded out", async () => {
-  const fake = fakeDb();
-  // 5 high-scoring Etisalat numbers vs 2 low-scoring Vodafone ones.
-  const et = Array.from({ length: 5 }, (_, i) => ({
-    msisdn: `0110000000${i}`, carrier: "etisalat", tier: "", sim_type: "", score: 90, tags: [],
-  }));
-  const vf = Array.from({ length: 2 }, (_, i) => ({
-    msisdn: `0100000000${i}`, carrier: "vodafone", tier: "", sim_type: "", score: 5, tags: [],
-  }));
-  await db.upsertNumbers({ rows: [...et, ...vf], today: "2026-09-02", runSeq: 1 }, opts(fake));
-  const rows = await db.readPublishRows({ perCarrier: 2, today: "2026-09-02" }, opts(fake));
-  assert.equal(rows.filter((r) => r.carrier === "etisalat").length, 2);
-  assert.equal(rows.filter((r) => r.carrier === "vodafone").length, 2);
-  assert.ok(rows[0].score >= rows.at(-1).score, "returned best-first");
-});
-
-test("readPublishRows marks a row first seen today as new, with age 0", async () => {
-  const fake = fakeDb();
-  await db.upsertNumbers({ rows: [ROWS[0]], today: "2026-08-01", runSeq: 1 }, opts(fake));
-  await db.upsertNumbers({ rows: [ROWS[1]], today: "2026-09-02", runSeq: 2 }, opts(fake));
-  const rows = await db.readPublishRows({ perCarrier: 10, today: "2026-09-02" }, opts(fake));
-  const byId = Object.fromEntries(rows.map((r) => [r.msisdn, r]));
-  assert.equal(byId["01112345678"].is_new, true);
-  assert.equal(byId["01112345678"].age_days, 0);
-  assert.equal(byId["01012345678"].is_new, false);
-  assert.equal(byId["01012345678"].age_days, 32);
-});
-
-test("readBestEverRows ranks by best_grade and includes gone numbers", async () => {
-  const fake = fakeDb();
-  await db.upsertNumbers({ rows: ROWS, today: "2026-09-02", runSeq: 1 }, opts(fake));
-  await db.applyGrades({ grades: new Map([["01512345678", 99]]) }, opts(fake));
-  await db.markGone({ runSeq: 2, carriers: ALL_CARRIERS }, opts(fake)); // everything gone
-  const rows = await db.readBestEverRows({ perCarrier: 1, today: "2026-09-02" }, opts(fake));
-  assert.deepEqual(rows.map((r) => r.msisdn), ["01512345678", "01112345678", "01012345678"]);
-  assert.equal(rows[0].best_grade, 99);
-  assert.equal(rows[0].available, false);
-});
-
-test("readBestEverRows gives each carrier its own slice, not a global top-N", async () => {
-  // 5 high-grade Etisalat numbers vs 2 low-grade Vodafone ones. A global top-3 would be
-  // all Etisalat; per-carrier must still surface Vodafone (the live bug: a global top
-  // 20,000 left only 374 of Vodafone's 5,202 numbers in the "best ever" view).
-  const et = Array.from({ length: 5 }, (_, i) => ({
-    msisdn: `0110000000${i}`, carrier: "etisalat", tier: "", sim_type: "", score: 59, tags: [],
-  }));
-  const vf = Array.from({ length: 2 }, (_, i) => ({
-    msisdn: `0100000000${i}`, carrier: "vodafone", tier: "", sim_type: "", score: 12, tags: [],
-  }));
-  const fake = fakeDb();
-  await db.upsertNumbers({ rows: [...et, ...vf], today: "2026-09-02", runSeq: 1 }, opts(fake));
-  const rows = await db.readBestEverRows({ perCarrier: 2, today: "2026-09-02" }, opts(fake));
-  assert.equal(rows.filter((r) => r.carrier === "vodafone").length, 2, "Vodafone must not be crowded out");
-  assert.equal(rows.filter((r) => r.carrier === "etisalat").length, 2);
-});
-
-test("readSearchIndex emits fixed-width msisdn + carrier initial + 3-digit score", async () => {
-  const fake = fakeDb();
-  await db.upsertNumbers({ rows: ROWS, today: "2026-09-02", runSeq: 1 }, opts(fake));
-  const index = await db.readSearchIndex(opts(fake));
-  assert.deepEqual(index, ["01012345678v040", "01112345678e055", "01512345678w020"]);
-  assert.ok(index.every((r) => r.length === 15));
-});
-
-test("readSearchIndex covers only available numbers", async () => {
-  const fake = fakeDb();
-  await db.upsertNumbers({ rows: ROWS, today: "2026-09-02", runSeq: 1 }, opts(fake));
-  await db.upsertNumbers({ rows: [ROWS[0]], today: "2026-09-03", runSeq: 2 }, opts(fake));
-  await db.markGone({ runSeq: 2, carriers: ALL_CARRIERS }, opts(fake));
-  assert.deepEqual(await db.readSearchIndex(opts(fake)), ["01012345678v040"]);
 });
 
 test("readCounts reports the per-carrier split and the total", async () => {

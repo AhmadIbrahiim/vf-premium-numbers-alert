@@ -34,9 +34,6 @@ export const USER_AGENT =
 
 export const REFERER = "https://eshop.vodafone.com.eg/en/lines/red/numbers";
 
-/** Where the published dashboard JSON is written (the gh-pages working copy in CI). */
-export const DATA_DIR = process.env.DATA_DIR || "data";
-
 // NOTE: the Neon connection string (DATABASE_URL) is deliberately NOT re-exported
 // here — src/db.js reads it from the environment at call time so it is never
 // captured at import, and so it stays in exactly one place.
@@ -49,24 +46,11 @@ export const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "";
 export const CANDIDATE_COUNT = Number(process.env.CANDIDATE_COUNT || 150);
 export const BEST_COUNT = Number(process.env.BEST_COUNT || 30);
 
-/**
- * Dashboard payload bounds. Postgres holds every number the carriers list (~160k),
- * but the ranked rows the dashboard renders are published as JSON, so they stay
- * bounded: `PUBLISH_PER_CARRIER` rich rows per carrier — per carrier rather than a
- * global top-N, because Etisalat's tier bonus would otherwise crowd out Vodafone's
- * whole 5.2k catalog. Every available number is still searchable in the app via the
- * compact `index.json` (~15 bytes each).
- */
-export const PUBLISH_PER_CARRIER = intEnv("PUBLISH_PER_CARRIER", 7000);
-/**
- * Rows in best-ever.json, **per carrier**. A global top-N does not work here for the
- * same reason it did not for latest.json: Etisalat's tier bonus lifts its scores, so a
- * global top 20,000 by best_grade came out 16,661 Etisalat / 2,965 WE / 374 Vodafone —
- * i.e. 93% of Vodafone's 5,202 numbers were missing from the "best ever seen" view.
- */
-export const BEST_EVER_PER_CARRIER = intEnv("BEST_EVER_PER_CARRIER", 7000);
-/** Cap on the new/disappeared msisdn lists in latest.json (the counts stay exact). */
-export const CHANGE_LIST_LIMIT = intEnv("CHANGE_LIST_LIMIT", 2000);
+/** Poll history kept per carrier for the provider status dashboard. */
+export const PROVIDER_RUNS_KEEP = intEnv("PROVIDER_RUNS_KEEP", 500);
+/** NEW/GONE events kept for the dashboard's change timeline. */
+export const EVENTS_KEEP = intEnv("EVENTS_KEEP", 2000);
+
 /** Delete rows gone for longer than this, so the table doesn't grow without bound. */
 export const HISTORY_KEEP_DAYS = intEnv("HISTORY_KEEP_DAYS", 30);
 

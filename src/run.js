@@ -1,22 +1,18 @@
 import { createHash } from "node:crypto";
-import { readFile, writeFile, appendFile } from "node:fs/promises";
-import { join } from "node:path";
+import { appendFile } from "node:fs/promises";
 
 import { fetchAll } from "./fetch.js";
 import { scoreMsisdn } from "./score.js";
 import { computeDiff } from "./diff.js";
 import { gradeCandidates } from "./grade.js";
-import {
-  readState, buildLatest, appendEvents, writeState,
-  buildCandidates, candidateSignature, gradeCacheValid, readGrades, writeGrades,
-} from "./store.js";
+import { buildCandidates, candidateSignature, gradeCacheValid } from "./store.js";
 import * as db from "./db.js";
 import { notify } from "./notify.js";
 import { sendPremiumEmail } from "./email.js";
 import {
-  DATA_DIR, MODEL, GITHUB_TOKEN, REPO,
+  MODEL, GITHUB_TOKEN, REPO,
   CANDIDATE_COUNT, BEST_COUNT, ALERT_THRESHOLD,
-  PUBLISH_PER_CARRIER, BEST_EVER_PER_CARRIER, HISTORY_KEEP_DAYS, CARRIER_SHRINK_TOLERANCE,
+  HISTORY_KEEP_DAYS, CARRIER_SHRINK_TOLERANCE, PROVIDER_RUNS_KEEP, EVENTS_KEEP,
   todayInTz, tierBonus,
 } from "./config.js";
 
@@ -71,7 +67,7 @@ export async function run({ fetchImpl, dbFetch } = {}) {
     return { skipped: "fetch-failed" };
   }
 
-  const { records, totalElements, returned, ok: okCarriers, failed } = catalog;
+  const { records, totalElements, returned, ok: okCarriers, failed, stats } = catalog;
   if (failed?.length) {
     // Those carriers keep their existing rows: not refreshed, but not wrongly retired.
     await summary(
@@ -144,6 +140,10 @@ export async function run({ fetchImpl, dbFetch } = {}) {
     return { skipped: "suspicious" };
   }
 
+  // Provider telemetry for the status dashboard — recorded whatever the outcome.
+  await db.recordProviderRuns({ stats, trusted: trustedCarriers, runAt: generatedAt }, dbOpts);
+  await db.pruneProviderRuns({ keep: PROVIDER_RUNS_KEEP }, dbOpts);
+
   // 5. persist every number the carriers listed, then flag the ones that vanished
   await db.upsertNumbers({ rows, today, runSeq }, dbOpts);
   await db.markGone({ runSeq, carriers: trustedCarriers }, dbOpts);
@@ -161,14 +161,14 @@ export async function run({ fetchImpl, dbFetch } = {}) {
   // REGRADE=1 forces a fresh LLM evaluation of every candidate, ignoring the grade cache —
   // use it to re-evaluate all numbers after a scorer/prompt change or on demand.
   const forceRegrade = process.env.REGRADE === "1" || process.env.REGRADE === "true";
-  const prevGrades = await readGrades(DATA_DIR);
+  const prevGrades = await db.readMeta("grades", dbOpts);
   let graded, regraded;
   if (!forceRegrade && gradeCacheValid(prevGrades, candSig)) {
     graded = prevGrades.graded;
     regraded = false;
   } else {
     graded = await gradeCandidates(candidates, { token: GITHUB_TOKEN, model: MODEL, count: BEST_COUNT });
-    await writeGrades(DATA_DIR, { sig: candSig, graded });
+    await db.writeMeta("grades", { sig: candSig, graded }, dbOpts);
     regraded = true;
   }
   // attach tags/score back onto graded entries; drop any no longer available.
@@ -179,22 +179,15 @@ export async function run({ fetchImpl, dbFetch } = {}) {
   const gradeMap = new Map(bestThirty.map((c) => [c.msisdn, c.grade]));
   await db.applyGrades({ grades: gradeMap }, dbOpts);
 
-  // 7. publish: Postgres does the ranking, we just write the JSON the dashboard reads
+  // 7. housekeeping. The dashboard queries Postgres live through the read-only Worker
+  // API, so nothing is published as JSON any more — there is no snapshot to go stale.
+  await db.recordNumberEvents({
+    newMsisdns: diff.isBaseline ? [] : diff.newMsisdns,
+    disappearedMsisdns: diff.disappearedMsisdns,
+    today, ts: generatedAt, scoreMap, carrierMap, keep: EVENTS_KEEP,
+  }, dbOpts);
   const pruned = await db.pruneGone({ keepDays: HISTORY_KEEP_DAYS, today }, dbOpts);
-  const [counts, publishRows, bestEver, searchIndex] = await Promise.all([
-    db.readCounts(dbOpts),
-    db.readPublishRows({ perCarrier: PUBLISH_PER_CARRIER, today }, dbOpts),
-    db.readBestEverRows({ perCarrier: BEST_EVER_PER_CARRIER, today }, dbOpts),
-    db.readSearchIndex(dbOpts),
-  ]);
-
-  const { events } = await readState(DATA_DIR);
-  const diffWithSet = { ...diff, newSet: new Set(diff.isBaseline ? [] : diff.newMsisdns) };
-  const latest = buildLatest({
-    generatedAt, total: totalElements, counts, bestThirty, publishRows, diff: diffWithSet, today,
-  });
-  const nextEvents = appendEvents(events, { today, generatedAt, diff: diffWithSet });
-  await writeState(DATA_DIR, { latest, events: nextEvents, bestEver, searchIndex });
+  const counts = await db.readCounts(dbOpts);
 
   // 8. alerts: NEW numbers scoring at/above the threshold (suppressed on baseline).
   // Drawn from the diff rather than best_thirty — a strong new arrival that the LLM
@@ -225,16 +218,16 @@ export async function run({ fetchImpl, dbFetch } = {}) {
     sendPremiumEmail(newPremium, { dashboardUrl, threshold: alertThreshold }),
   ]);
 
-  // 9. change detection for commit gating
+  // 9. change detection, kept for the run summary (nothing is published, so this no
+  // longer gates a commit).
   const sig = signature(available, bestThirty, tierMap);
-  let prevSig = "";
-  try { prevSig = (await readFile(join(DATA_DIR, "signature.txt"), "utf8")).trim(); } catch {}
+  const prevSig = (await db.readMeta("signature", dbOpts))?.sig || "";
   const changed = sig !== prevSig;
-  await writeFile(join(DATA_DIR, "signature.txt"), sig);
+  await db.writeMeta("signature", { sig }, dbOpts);
   await emitOutput("changed", String(changed));
 
   await summary(
-    `✅ run ok | total=${totalElements} available=${available.length} published=${latest.published_count} ` +
+    `✅ run ok | total=${totalElements} available=${counts.available_total} ` +
     `new=${diff.newMsisdns.length} gone=${diff.disappearedMsisdns.length} pruned=${pruned} ` +
     `trusted=${trustedCarriers.join("+") || "none"}` +
     `${failed?.length ? ` failed:${failed.map((f) => f.carrier).join(",")}` : ""} ` +
