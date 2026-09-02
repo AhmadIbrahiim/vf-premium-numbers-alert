@@ -12,7 +12,9 @@ import {
   ETISALAT_POOLS,
   ETISALAT_PREFIX,
   ETISALAT_RESPONSE_CAP,
-  ETISALAT_MAX_DEPTH,
+  ETISALAT_SUFFIX_DIGITS,
+  ETISALAT_MAX_SUFFIX_DIGITS,
+  ETISALAT_CONCURRENCY,
   WE_ENDPOINT,
   WE_CHANNEL_ID,
   WE_DEVICE_ID,
@@ -24,12 +26,39 @@ import {
   WE_PAGE_SIZE,
   WE_MAX_PAGES,
   WE_CONCURRENCY,
+  WE_QUERY_CAP,
+  WE_MIN_REQUEST_MS,
+  WE_PREFIX,
+  WE_MAX_PREFIX_DIGITS,
   weGradeSlug,
 } from "./config.js";
 
 /** @typedef {{ id: string, msisdn: string, available: boolean, price: number, simType: string, tariffs: string[], carrier: string, tier: string }} Record */
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Total digits in an Egyptian mobile number. */
+const MSISDN_LENGTH = 11;
+/** WE works in `telnum`: the msisdn without its leading zero. */
+const TELNUM_LENGTH = 10;
+
+/**
+ * Run `fn` over `items` with at most `limit` in flight. Keeps us a polite client of
+ * live carrier APIs instead of firing hundreds of requests at once.
+ */
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
 
 const MSISDN_RE = /^01[0125]\d{8}$/;
 
@@ -170,7 +199,13 @@ export async function fetchVodafone(opts = {}) {
  * Dedupes by msisdn keeping the highest-bonus tier. Throws on persistent
  * per-pool failure so the caller can skip the run without overwriting data.
  *
- * @param {object} [opts] - { fetchImpl, retries=4, baseDelayMs=1000, timeoutMs=45000, pools }
+ * A response is capped at ~1000 numbers, so each pool is partitioned by the last
+ * `suffixDigits` digits using the API's fixed-width mask ("011******52"): 100 disjoint
+ * buckets per pool, each well under the cap, split further only where one still caps.
+ * See the ETISALAT_* block in config.js for why this beats walking prefixes.
+ *
+ * @param {object} [opts] - { fetchImpl, retries=4, baseDelayMs=1000, timeoutMs=45000,
+ *   pools, prefix, responseCap, suffixDigits, maxSuffixDigits, concurrency }
  * @returns {Promise<{ records: Record[], totalElements: number, returned: number }>}
  */
 export async function fetchEtisalat(opts = {}) {
@@ -179,9 +214,11 @@ export async function fetchEtisalat(opts = {}) {
   const baseDelayMs = opts.baseDelayMs ?? 1000;
   const timeoutMs = opts.timeoutMs ?? 45000;
   const pools = opts.pools || ETISALAT_POOLS;
-  const rootPrefix = opts.prefix ?? ETISALAT_PREFIX;
+  const prefix = opts.prefix ?? ETISALAT_PREFIX;
   const cap = opts.responseCap ?? ETISALAT_RESPONSE_CAP;
-  const maxDepth = opts.maxDepth ?? ETISALAT_MAX_DEPTH;
+  const suffixDigits = opts.suffixDigits ?? ETISALAT_SUFFIX_DIGITS;
+  const maxSuffixDigits = opts.maxSuffixDigits ?? ETISALAT_MAX_SUFFIX_DIGITS;
+  const concurrency = opts.concurrency ?? ETISALAT_CONCURRENCY;
 
   const headers = {
     accept: "application/json, text/plain, */*",
@@ -192,12 +229,21 @@ export async function fetchEtisalat(opts = {}) {
     applicationPassword: ETISALAT_APP_PASSWORD,
   };
 
+  /**
+   * Mask matching every number in `prefix` whose last digits are `suffix`, e.g.
+   * prefix "011" + suffix "52" -> "011******52". An 8-digit suffix is an exact number.
+   */
+  function mask(suffix) {
+    const wildcards = MSISDN_LENGTH - prefix.length - suffix.length;
+    return prefix + "*".repeat(Math.max(0, wildcards)) + suffix;
+  }
+
   /** One pool+pattern query -> the numbers array. */
   async function query(poolId, pattern) {
-    const url = `${ETISALAT_ENDPOINT}&poolId=${poolId}&searchPattern=${encodeURIComponent(pattern + "*")}`;
+    const url = `${ETISALAT_ENDPOINT}&poolId=${poolId}&searchPattern=${encodeURIComponent(pattern)}`;
     const body = await fetchJsonWithRetry({
       doFetch, url, headers, retries, baseDelayMs, timeoutMs,
-      label: `fetchEtisalat pool ${poolId} pattern ${pattern}*`,
+      label: `fetchEtisalat pool ${poolId} pattern ${pattern}`,
     });
     return Array.isArray(body?.numbers) ? body.numbers : [];
   }
@@ -207,11 +253,11 @@ export async function fetchEtisalat(opts = {}) {
   const truncated = [];
 
   /**
-   * Collect one pool under `prefix`. A response at the server cap means there are
-   * more numbers than it will hand over, so split into `<prefix><digit>` and recurse.
+   * Collect one bucket. A response at the cap means the server withheld some, so fix
+   * one more trailing digit and split the bucket ten ways.
    */
-  async function collect(pool, prefix, depth) {
-    const numbers = await query(pool.poolId, prefix);
+  async function collect(pool, suffix) {
+    const numbers = await query(pool.poolId, mask(suffix));
     returned += numbers.length;
     for (const n of numbers) {
       const msisdn = String(n);
@@ -219,20 +265,23 @@ export async function fetchEtisalat(opts = {}) {
       const prev = byMsisdn.get(msisdn);
       if (!prev || pool.bonus > prev.bonus) byMsisdn.set(msisdn, { tier: pool.tier, bonus: pool.bonus });
     }
-    if (numbers.length < cap) return; // complete for this prefix
-    if (depth >= maxDepth) { truncated.push(`${pool.poolId}:${prefix}*`); return; }
-    // Digits are independent sub-ranges; fetch the ten of them together.
-    await Promise.all(
-      "0123456789".split("").map((d) => collect(pool, prefix + d, depth + 1))
-    );
+    if (numbers.length < cap) return;
+    if (suffix.length >= maxSuffixDigits) { truncated.push(`${pool.poolId}:${mask(suffix)}`); return; }
+    await mapLimit("0123456789".split(""), concurrency, (d) => collect(pool, d + suffix));
   }
 
-  for (const pool of pools) await collect(pool, rootPrefix, 0);
+  // Every suffix of `suffixDigits` digits: disjoint buckets whose union is the pool.
+  const buckets = Array.from({ length: 10 ** suffixDigits }, (_, i) =>
+    String(i).padStart(suffixDigits, "0")
+  );
+  for (const pool of pools) {
+    await mapLimit(buckets, concurrency, (suffix) => collect(pool, suffix));
+  }
 
   if (truncated.length) {
     console.warn(
-      `[fetchEtisalat] still at the response cap at max depth for ${truncated.join(", ")} ` +
-      `(raise ETISALAT_MAX_DEPTH to split further)`
+      `[fetchEtisalat] still at the response cap with ${maxSuffixDigits} digits fixed for ` +
+      `${truncated.join(", ")} (raise ETISALAT_MAX_SUFFIX_DIGITS)`
     );
   }
 
@@ -278,35 +327,47 @@ function weHeaders() {
  * cap. Maps each telnum (integer, no leading 0) to an msisdn. Dedupes by msisdn (first grade
  * wins). Throws on a rejected query (retCode != "0") or transport failure.
  *
- * WE grades can hold many thousands of numbers (the deepest observed runs ~392 pages),
- * returned in a STABLE ascending numeric order. WE_MAX_PAGES is a safety bound well above
- * real inventory; if a grade somehow still fills it, that is expected sampling rather than
- * unknown truncation (the first N pages are the same set run-to-run, so a cap does not cause
- * false "gone" churn). We log such grades rather than failing the whole run.
+ * WE truncates any single query at WE_QUERY_CAP (20,000) results, so a big grade is split
+ * by fixing more leading digits of the `fitmod` mask until each query fits under the cap —
+ * GRADE_006 alone holds 47k+. Anything still incomplete is logged rather than failing the
+ * whole run.
  *
  * @param {object} [opts] - { fetchImpl, retries=4, baseDelayMs=1000, timeoutMs=45000, gradeMin, gradeMax }
  * @returns {Promise<{ records: Record[], totalElements: number, returned: number }>}
  */
 export async function fetchWe(opts = {}) {
   const doFetch = opts.fetchImpl || globalThis.fetch;
-  const retries = opts.retries ?? 4;
+  // Thousands of requests per run means a transient connection refusal is likely at
+  // least once; ride it out rather than failing the whole poll.
+  const retries = opts.retries ?? 6;
   const baseDelayMs = opts.baseDelayMs ?? 1000;
   const timeoutMs = opts.timeoutMs ?? 45000;
   const gradeMin = opts.gradeMin ?? WE_GRADE_MIN;
   const gradeMax = opts.gradeMax ?? WE_GRADE_MAX;
   const maxPages = opts.maxPages ?? WE_MAX_PAGES;
+  const pageSize = opts.pageSize ?? WE_PAGE_SIZE;
   const concurrency = Math.max(1, opts.concurrency ?? WE_CONCURRENCY);
+  const queryCap = opts.queryCap ?? WE_QUERY_CAP;
+  const prefix = opts.prefix ?? WE_PREFIX;
+  const maxPrefixDigits = opts.maxPrefixDigits ?? WE_MAX_PREFIX_DIGITS;
+  const minRequestMs = opts.minRequestMs ?? WE_MIN_REQUEST_MS;
 
-  /** One page of one grade -> the telnumlist. Throws if WE rejects the query. */
-  async function fetchPage(grade, page) {
+  /** The digit mask for a telnum prefix, e.g. "150" -> "150???????". */
+  function fitmodFor(pfx) {
+    return pfx + "?".repeat(Math.max(0, TELNUM_LENGTH - pfx.length));
+  }
+
+  /** One page of one (grade, fitmod) -> the telnumlist. Throws if WE rejects the query. */
+  async function fetchPage(grade, fitmod, page) {
+    if (minRequestMs) await sleep(minRequestMs);
     const body = await fetchJsonWithRetry({
       doFetch,
       url: WE_ENDPOINT,
       method: "POST",
       headers: weHeaders(),
-      body: JSON.stringify({ fitmod: "15????????", maxCount: String(WE_PAGE_SIZE), pageindex: String(page), numberlevel: grade }),
+      body: JSON.stringify({ fitmod, maxCount: String(pageSize), pageindex: String(page), numberlevel: grade }),
       retries, baseDelayMs, timeoutMs,
-      label: `fetchWe ${grade} p${page}`,
+      label: `fetchWe ${grade} ${fitmod} p${page}`,
     });
     const retCode = String(body?.header?.retCode ?? "");
     if (retCode !== "0") throw new Error(`fetchWe ${grade} rejected: retCode ${retCode}`);
@@ -315,34 +376,68 @@ export async function fetchWe(opts = {}) {
 
   const byMsisdn = new Map(); // msisdn -> grade slug (first grade wins)
   let returned = 0;
-  const cappedGrades = [];
+  const cappedBranches = [];
 
-  for (let g = gradeMin; g <= gradeMax; g++) {
-    const grade = weGradeSlug(g);
-    let exhausted = false;
-    // Pages are independent, so pull them `concurrency` at a time; a short page in
-    // the batch is the end of this grade's inventory.
-    for (let page = 1; page <= maxPages && !exhausted; page += concurrency) {
+  function absorb(list, grade) {
+    returned += list.length;
+    for (const item of list) {
+      const msisdn = "0" + String(item?.telnum ?? "");
+      if (!MSISDN_RE.test(msisdn)) continue;
+      if (!byMsisdn.has(msisdn)) byMsisdn.set(msisdn, grade);
+    }
+  }
+
+  /**
+   * Is this query going to be truncated? Page `floor(cap/pageSize)+1` only has rows when
+   * the result set reaches the cap, so one request answers it — far cheaper than
+   * enumerating 20,000 rows and then discovering they were incomplete.
+   */
+  async function isCapped(grade, fitmod) {
+    const probe = Math.floor(queryCap / pageSize) + 1;
+    if (probe > maxPages) return false;
+    const list = await fetchPage(grade, fitmod, probe);
+    absorb(list, grade); // it is real inventory, keep it
+    return list.length > 0;
+  }
+
+  /** Page one (grade, fitmod) to exhaustion, `concurrency` pages at a time. */
+  async function enumerate(grade, fitmod) {
+    for (let page = 1; page <= maxPages; page += concurrency) {
       const batch = [];
       for (let i = 0; i < concurrency && page + i <= maxPages; i++) batch.push(page + i);
-      const lists = await Promise.all(batch.map((p) => fetchPage(grade, p)));
+      const lists = await Promise.all(batch.map((p) => fetchPage(grade, fitmod, p)));
+      let short = false;
       for (const list of lists) {
-        returned += list.length;
-        for (const item of list) {
-          const msisdn = "0" + String(item?.telnum ?? "");
-          if (!MSISDN_RE.test(msisdn)) continue;
-          if (!byMsisdn.has(msisdn)) byMsisdn.set(msisdn, grade);
-        }
-        if (list.length < WE_PAGE_SIZE) exhausted = true;
+        absorb(list, grade);
+        if (list.length < pageSize) short = true;
       }
+      if (short) return true;
     }
-    // Best-effort: a grade still full at the cap is sampled (stable numeric order), not failed.
-    if (!exhausted) cappedGrades.push(grade);
+    return false;
   }
-  if (cappedGrades.length) {
+
+  /** Collect one branch, splitting the mask when the server would truncate it. */
+  async function collect(grade, pfx) {
+    const fitmod = fitmodFor(pfx);
+    if (await isCapped(grade, fitmod)) {
+      if (pfx.length < maxPrefixDigits) {
+        await mapLimit("0123456789".split(""), concurrency, (d) => collect(grade, pfx + d));
+        return;
+      }
+      cappedBranches.push(`${grade}:${fitmod}`);
+    }
+    const exhausted = await enumerate(grade, fitmod);
+    if (!exhausted) cappedBranches.push(`${grade}:${fitmod} (hit maxPages)`);
+  }
+
+  for (let g = gradeMin; g <= gradeMax; g++) {
+    await collect(weGradeSlug(g), prefix);
+  }
+
+  if (cappedBranches.length) {
     console.warn(
-      `[fetchWe] sampled first ${maxPages} pages for ${cappedGrades.join(", ")} ` +
-      `(inventory exceeds the cap; raise WE_MAX_PAGES to pull deeper)`
+      `[fetchWe] could not fully enumerate ${cappedBranches.join(", ")} ` +
+      `(raise WE_MAX_PREFIX_DIGITS / WE_MAX_PAGES to pull deeper)`
     );
   }
 

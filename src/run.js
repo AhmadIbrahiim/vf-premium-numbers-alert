@@ -12,6 +12,7 @@ import {
 } from "./store.js";
 import * as db from "./db.js";
 import { notify } from "./notify.js";
+import { sendPremiumEmail } from "./email.js";
 import {
   DATA_DIR, MODEL, GITHUB_TOKEN, REPO,
   CANDIDATE_COUNT, BEST_COUNT, ALERT_THRESHOLD,
@@ -77,7 +78,8 @@ export async function run({ fetchImpl, dbFetch } = {}) {
 
   // 2. score (+ Etisalat tier bonus)
   const scoreMap = new Map();
-  const tierMap = new Map(); // msisdn -> Etisalat tier slug / WE grade code ("" for Vodafone)
+  const carrierMap = new Map(); // msisdn -> "vodafone" | "etisalat" | "we"
+  const tierMap = new Map();    // msisdn -> Etisalat tier slug / WE grade code ("" for Vodafone)
   const rows = [];
   for (const r of records) {
     if (!r.available) continue;
@@ -90,6 +92,7 @@ export async function run({ fetchImpl, dbFetch } = {}) {
     const tags = isEtisalat && tier ? [...base.tags, `etisalat-${tier}`] : base.tags;
     const score = Math.min(100, base.score + bonus);
     scoreMap.set(r.msisdn, { score, tags });
+    carrierMap.set(r.msisdn, r.carrier || "vodafone");
     tierMap.set(r.msisdn, tier);
     rows.push({
       msisdn: r.msisdn,
@@ -165,11 +168,34 @@ export async function run({ fetchImpl, dbFetch } = {}) {
   const nextEvents = appendEvents(events, { today, generatedAt, diff: diffWithSet });
   await writeState(DATA_DIR, { latest, events: nextEvents, bestEver, searchIndex });
 
-  // 7. alerts: NEW numbers that are highly graded (suppressed on baseline)
+  // 7. alerts: NEW numbers scoring at/above the threshold (suppressed on baseline).
+  // Drawn from the diff rather than best_thirty — a strong new arrival that the LLM
+  // did not happen to rank in its top 30 is still worth an alert.
+  // Read at call time so an env change takes effect without a fresh module import.
+  const alertThreshold = Number(process.env.ALERT_THRESHOLD || ALERT_THRESHOLD);
+  const gradeOf = (m) => Math.max(gradeMap.get(m) ?? 0, scoreMap.get(m)?.score ?? 0);
   const newPremium = diff.isBaseline
     ? []
-    : latest.best_thirty.filter((c) => c.is_new && c.grade >= ALERT_THRESHOLD);
-  const notifyResult = await notify(newPremium, { token: GITHUB_TOKEN, repo: REPO });
+    : diff.newMsisdns
+        .filter((m) => gradeOf(m) >= alertThreshold)
+        .map((m) => ({
+          msisdn: m,
+          score: scoreMap.get(m)?.score ?? 0,
+          tags: scoreMap.get(m)?.tags ?? [],
+          grade: gradeOf(m),
+          reason: bestThirty.find((c) => c.msisdn === m)?.reason || "",
+          carrier: carrierMap.get(m) || "",
+          tier: tierMap.get(m) || "",
+          sim_type: "",
+          is_new: true,
+        }))
+        .sort((a, b) => b.grade - a.grade);
+
+  const dashboardUrl = REPO ? `https://${REPO.split("/")[0]}.github.io/${REPO.split("/")[1]}/` : "";
+  const [notifyResult, emailResult] = await Promise.all([
+    notify(newPremium, { token: GITHUB_TOKEN, repo: REPO }),
+    sendPremiumEmail(newPremium, { dashboardUrl, threshold: alertThreshold }),
+  ]);
 
   // 8. change detection for commit gating
   const sig = signature(available, bestThirty, tierMap);
@@ -183,7 +209,7 @@ export async function run({ fetchImpl, dbFetch } = {}) {
     `✅ run ok | total=${totalElements} available=${available.length} published=${latest.published_count} ` +
     `new=${diff.newMsisdns.length} gone=${diff.disappearedMsisdns.length} pruned=${pruned} ` +
     `baseline=${diff.isBaseline} llm=${regraded ? "graded" : "cached"} ` +
-    `alerts=${newPremium.length} (${notifyResult}) changed=${changed}`
+    `alerts=${newPremium.length} (issue:${notifyResult} email:${emailResult}) changed=${changed}`
   );
   return { changed, diff, newPremium, notifyResult, regraded };
 }

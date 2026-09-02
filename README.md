@@ -9,14 +9,18 @@ numbers (refined by an LLM), tracks new arrivals and how long each has been avai
 and shows it all on a static dashboard. State lives in **Neon Postgres**; the poller
 runs in GitHub Actions and publishes the dashboard to GitHub Pages — no servers.
 
-The carriers list ~160k numbers between them. Each one caps how much it will hand
-over per request in a different way, so the fetchers work around all three:
+The carriers list **~198k** numbers between them, and every one of them silently caps
+how much it will hand over — in a different way. Each cap was verified against the live
+API, and each is worked around:
 
 | Carrier | Its limit | How we get past it | Collected |
 |---|---|---|---|
-| Vodafone | one catalog path per line type | pages `red` **and** `flex`, without the `simFamilyType==OWNER` filter | ~5.2k |
-| Etisalat | ~1000 numbers per `searchPattern` response | walks number prefixes, splitting `<prefix>*` into ten `<prefix><digit>*` queries whenever a response comes back at the cap | ~96k |
-| WE | `maxCount` pinned at 51 server-side | pages each grade to exhaustion (the deepest runs ~392 pages), 8 pages at a time | ~58k |
+| Vodafone | a separate catalog path per line type | pages `red` **and** `flex`, without the `simFamilyType==OWNER` filter | 5.2k |
+| Etisalat | ~1000 numbers per response, whatever you ask for | `searchPattern` takes a fixed-width mask, so each pool is split into 100 disjoint buckets by its last two digits (`011******52`), each well under the cap | 96.3k |
+| WE | 51 numbers per page **and** 20,000 per query | `fitmod` is a digit mask, so a query that hits the cap is split by fixing one more leading digit (`150???????`), recursively | 96.4k |
+
+The caps are the whole story here: queried naively the same three APIs report only
+2.7k / 5.0k / 6.3k — under 8% of what they actually hold.
 
 ## How it works
 
@@ -42,14 +46,16 @@ A scheduled GitHub Actions workflow (`.github/workflows/poll.yml`, best-effort e
    `best-ever.json` (top by `best_grade`) and `index.json` (every available number in
    ~15 bytes each, for full-catalog search). Rows gone longer than
    `HISTORY_KEEP_DAYS` are deleted.
-7. **notify** — opens/comments a GitHub Issue when a NEW number grades ≥ threshold.
+7. **alert** — when a NEW number scores ≥ `ALERT_THRESHOLD` it opens/comments a GitHub
+   Issue and, if `RESEND_API_KEY` + `ALERT_EMAIL_TO` are set, emails the details. Both
+   are best-effort: a failed alert is logged and never fails the poll or loses data.
 8. **commit** — pushes data + dashboard to the `gh-pages` branch **only when the
    meaningful state changed** (no timestamp-only commits).
 
 ### Why Postgres
 
 The state used to be a `history.json` blob, read and rewritten whole every run. At
-~160k numbers that was 27MB committed every 10 minutes, which forced the poller to
+~198k numbers that would be 30MB+ committed every poll, which forced the poller to
 track only a slice — so `first_seen` was wrong for most numbers and the per-run diff
 was mostly sampling noise (~370 "new" and ~460 "gone" every run, against a real churn
 of ~30). Postgres tracks every number exactly, with no rewrite churn.
@@ -61,11 +67,11 @@ Served from `gh-pages`, same-origin:
 | File | When | Size | What |
 |---|---|---|---|
 | `latest.json` | on load | ~3.2MB | ranked rows for browsing + the LLM's best 30 |
-| `index.json` | first search | ~2.8MB | **every** available number (`<msisdn><carrier initial><score>`) |
+| `index.json` | first search | ~3.4MB | **every** available number (`<msisdn><carrier initial><score>`) |
 | `best-ever.json` | "best ever" tab | ~3.9MB | top by `best_grade`, available or not |
 | `events.jsonl.json` | on load | ~45KB | recent change timeline |
 
-So browsing shows the top-ranked numbers, and searching digits reaches all ~160k.
+So browsing shows the top-ranked numbers, and searching digits reaches all ~198k.
 
 ## One-time setup
 
@@ -73,14 +79,14 @@ So browsing shows the top-ranked numbers, and searching digits reaches all ~160k
 2. **Create a Neon project** and set its connection string as a repo secret:
    `gh secret set DATABASE_URL`. The pipeline refuses to run without it rather than
    silently losing history. The schema is created on the first run (`db.migrate()`).
-3. **Settings → Actions → General → Workflow permissions:** "Read and write
+5. **Settings → Actions → General → Workflow permissions:** "Read and write
    permissions" (lets the workflow push to `gh-pages` and open issues).
-4. Run the workflow once: **Actions → poll-vf-numbers → Run workflow**. This seeds the
+6. Run the workflow once: **Actions → poll-vf-numbers → Run workflow**. This seeds the
    baseline (no alerts on the first run) and creates the `gh-pages` branch.
-5. **Settings → Pages:** source = branch `gh-pages`, folder `/ (root)`.
-6. Visit `https://<you>.github.io/<repo>/`.
+7. **Settings → Pages:** source = branch `gh-pages`, folder `/ (root)`.
+8. Visit `https://<you>.github.io/<repo>/`.
 
-`GITHUB_TOKEN` is provided automatically; `DATABASE_URL` is the only secret to set.
+`GITHUB_TOKEN` is provided automatically. `DATABASE_URL` is the only required secret.
 
 ## Configuration
 
@@ -89,7 +95,10 @@ Set as workflow `env:` or repo variables (all optional):
 | Var | Default | Purpose |
 |---|---|---|
 | `MODEL` | `openai/gpt-4o-mini` | GitHub Models model (keep a low tier for daily caps) |
-| `ALERT_THRESHOLD` | `90` | Min grade for a NEW number to open an Issue |
+| `ALERT_THRESHOLD` | `50` | Min score for a NEW number to raise an alert. **Not 90:** the public catalogs top out at 59 across all ~198k numbers (~215 clear 50, ~20 clear 60), so 90 could never fire |
+| `RESEND_API_KEY` | — | Resend key; unset disables email alerts |
+| `ALERT_EMAIL_TO` | — | Alert recipient; unset disables email alerts |
+| `ALERT_EMAIL_FROM` | `onboarding@resend.dev` | Sender. Resend's shared sender only delivers to the Resend account owner — to email anyone else, verify a domain at resend.com/domains and set this to an address on it |
 | `CANDIDATE_COUNT` | `150` | How many top-scored numbers the LLM ranks |
 | `BEST_COUNT` | `30` | How many to surface |
 | `PUBLISH_PER_CARRIER` | `7000` | Rich ranked rows per carrier in `latest.json` — per carrier, so Etisalat's tier bonus can't crowd out Vodafone's whole 5.2k catalog |
@@ -97,9 +106,12 @@ Set as workflow `env:` or repo variables (all optional):
 | `CHANGE_LIST_LIMIT` | `2000` | Cap on the new/disappeared lists in `latest.json` (the counts stay exact) |
 | `HISTORY_KEEP_DAYS` | `30` | Delete rows gone longer than this |
 | `VF_TYPES` | `red,flex` | Vodafone line-type catalog paths to page |
-| `ETISALAT_MAX_DEPTH` | `5` | Max prefix digits appended when splitting a capped response |
-| `WE_MAX_PAGES` | `800` | Safety bound on pages per WE grade (~392 observed) |
-| `WE_CONCURRENCY` | `8` | WE pages fetched in parallel |
+| `ETISALAT_SUFFIX_DIGITS` | `2` | Trailing digits fixed per bucket (2 → 100 buckets/pool) |
+| `ETISALAT_MAX_SUFFIX_DIGITS` | `6` | Most digits fixed when splitting a capped bucket |
+| `WE_QUERY_CAP` | `20000` | WE's per-query result cap; reaching it triggers a mask split |
+| `WE_MAX_PREFIX_DIGITS` | `6` | Most leading digits fixed when splitting (6 ⇒ ≤10⁴ per query, provably under the cap) |
+| `WE_MAX_PAGES` | `800` | Safety bound on pages per query |
+| `WE_CONCURRENCY` | `4` | WE pages in parallel (kept low; 8 got our IP throttled) |
 
 ## Dashboard CSS
 
@@ -129,8 +141,10 @@ for Neon's SQL-over-HTTP endpoint.
 
 ## Notes
 
-- GitHub scheduled cron is best-effort; effective cadence is ~10–20 min.
-- A full poll takes ~2–3 min, almost all of it WE pagination (~1150 requests).
+- Polls every 30 min (cron is best-effort). Not more often: a full poll is ~4,000
+  requests — WE alone needs ~3,500, since it yields 51 numbers per request — and a
+  10-minute cadence throttled our IP twice during development. A poll takes ~4–5 min.
+- If WE starts timing out on connect, that is the throttle. Back off to hourly.
 - The numbers are already publicly listed on each carrier's shop; the dashboard just
   organizes that public data.
 - If a carrier rotates its gating tokens and fetches start failing, the run skips

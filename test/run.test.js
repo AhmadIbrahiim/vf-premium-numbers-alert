@@ -150,3 +150,72 @@ test("REGRADE=1 forces re-evaluation even when the grade cache is valid", async 
     prev.db === undefined ? delete process.env.DATABASE_URL : (process.env.DATABASE_URL = prev.db);
   }
 });
+
+test("a new number at/above the threshold triggers the alert email", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vf-email-"));
+  const prev = {
+    d: process.env.DATA_DIR, t: process.env.GITHUB_TOKEN, r: process.env.GITHUB_REPOSITORY,
+    gmin: process.env.WE_GRADE_MIN, gmax: process.env.WE_GRADE_MAX, db: process.env.DATABASE_URL,
+    key: process.env.RESEND_API_KEY, to: process.env.ALERT_EMAIL_TO, thr: process.env.ALERT_THRESHOLD,
+  };
+  process.env.DATA_DIR = dir;
+  process.env.DATABASE_URL = "postgresql://u:p@fake.neon.tech/db";
+  process.env.RESEND_API_KEY = "re_fake";
+  process.env.ALERT_EMAIL_TO = "me@example.com";
+  process.env.ALERT_THRESHOLD = "1"; // any new number qualifies
+  delete process.env.GITHUB_TOKEN;      // LLM fallback
+  delete process.env.GITHUB_REPOSITORY; // skip the GitHub issue
+  process.env.WE_GRADE_MIN = "17";
+  process.env.WE_GRADE_MAX = "17";
+  const { run } = await import("../src/run.js?email-test=" + Date.now());
+
+  const sent = [];
+  const dbFetchOf = (fake) => async (url, init) => {
+    if (url.includes("api.resend.com")) {
+      sent.push(JSON.parse(init.body));
+      return { ok: true, status: 200, json: async () => ({ id: "mail-1" }) };
+    }
+    return fake.fetch(url, init);
+  };
+
+  try {
+    const fake = fakeDb();
+    const mailAwareFetch = dbFetchOf(fake);
+    // globalThis.fetch is what src/email.js uses; point it at the stub.
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = mailAwareFetch;
+    try {
+      // Run 1 seeds the baseline -> alerts suppressed, no mail.
+      await run({
+        fetchImpl: routedFetch({ vf: { content: [], totalElements: 0 }, etByPool: {}, weByGrade: { GRADE_017: [[1555027138]] } }),
+        dbFetch: fake.fetch,
+      });
+      assert.equal(sent.length, 0, "baseline run must not email");
+
+      // Run 2 introduces a genuinely new number -> one email.
+      await run({
+        fetchImpl: routedFetch({
+          vf: { content: [], totalElements: 0 },
+          etByPool: {},
+          weByGrade: { GRADE_017: [[1555027138, 1500111222]] },
+        }),
+        dbFetch: fake.fetch,
+      });
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+
+    assert.equal(sent.length, 1, "exactly one email for the new number");
+    assert.equal(sent[0].to, "me@example.com");
+    assert.match(sent[0].subject, /premium number/i);
+    assert.match(sent[0].text, /0150 011 1222/);
+    assert.ok(!sent[0].text.includes("0155 502 7138"), "the pre-existing number is not re-alerted");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+    for (const [k, v] of [["DATA_DIR", prev.d], ["GITHUB_TOKEN", prev.t], ["GITHUB_REPOSITORY", prev.r],
+                          ["WE_GRADE_MIN", prev.gmin], ["WE_GRADE_MAX", prev.gmax], ["DATABASE_URL", prev.db],
+                          ["RESEND_API_KEY", prev.key], ["ALERT_EMAIL_TO", prev.to], ["ALERT_THRESHOLD", prev.thr]]) {
+      v === undefined ? delete process.env[k] : (process.env[k] = v);
+    }
+  }
+});
