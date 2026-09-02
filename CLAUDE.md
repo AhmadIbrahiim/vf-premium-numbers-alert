@@ -164,20 +164,37 @@ cd web && npx vercel --prod            # deploy
 No `GITHUB_TOKEN` → grading falls back to the deterministic scorer, which is fine for a
 dry run.
 
-## Remotes
+## Remotes and deploys
 
-- `origin` → GitHub `AhmadIbrahiim/vf-premium-numbers-alert` — **primary**. The Actions
-  workflow lives here; all branch upstreams point here.
-- `gitlab` → GitLab `laila.alazap/vf-premium-numbers-alert` — private **mirror**, pushed
-  over the `gitlab-alt` SSH alias. No CI there.
+- `origin` fetches from GitHub `AhmadIbrahiim/vf-premium-numbers-alert` and **pushes to
+  both** GitHub and the GitLab mirror (two `pushurl` entries). One `git push` updates
+  both — which matters because **Vercel deploys from GitLab**, so pushing only to GitHub
+  would silently ship nothing.
+- `gitlab` → GitLab `laila.alazap/vf-premium-numbers-alert`, private, over the
+  `gitlab-alt` SSH alias. Kept for explicit single-remote operations.
+- GitHub Actions runs the poller. GitLab has no CI.
+
+If you ever re-add a pushurl, list **both** URLs: as soon as any `pushurl` exists the
+fetch URL stops being used for pushes, so naming one remote silently drops the other.
+
+Never `git push -u gitlab` — that retargets the branch's upstream and later pushes go to
+the mirror alone.
 
 Two SSH identities resolve differently on gitlab.com: the default key is
 **@AhmadIbrahim**, `~/.ssh/gitlab_alt` is **@laila.alazap**. The `IdentitiesOnly yes`
 line in `~/.ssh/config` is what keeps them apart — without it ssh offers `id_rsa` first
 and GitLab authenticates as the wrong account, which presents as a permissions error.
 
-Never `git push -u gitlab` — that retargets the branch's upstream and later pushes go to
-the mirror instead of GitHub.
+### Vercel needs Root Directory = `web`
+
+The Next app is not at the repo root, so **Settings → Build & Deployment → Root
+Directory** must be `web`. Without it Vercel builds the root, finds no framework, and
+serves a 404 — the tell in the log is a build that finishes in milliseconds with
+`Build Completed in /vercel/output [60ms]` and "no files were prepared". It is not a
+routing problem; nothing was built. Vercel reads `web/vercel.json` once the root is set.
+
+`DATABASE_URL` must be set for Production, Preview **and** Development, or preview
+deploys render the "couldn't reach the database" state.
 
 ## Secrets
 
