@@ -31,6 +31,8 @@ export function fakeDb(seed = {}) {
   async function fetchImpl(url, init) {
     const { query, params } = JSON.parse(init.body);
     queries.push(query);
+    // NOTE: readPublishRows and readBestEverRows both use `row_number() over`, so the
+    // best-ever branch has to be tested first or it gets swallowed by the other.
 
     if (/^\s*create /i.test(query)) return reply([]);
 
@@ -106,6 +108,25 @@ export function fakeDb(seed = {}) {
       return reply([...counts.entries()].sort().map(([carrier, n]) => ({ carrier, n })));
     }
 
+    if (query.includes("partition by carrier order by best_grade desc")) {
+      const [perCarrier, today] = params;
+      const perC = new Map();
+      return reply(
+        [...rows.values()]
+          .sort((a, b) => b.best_grade - a.best_grade || b.score - a.score || a.msisdn.localeCompare(b.msisdn))
+          .filter((r) => {
+            const n = (perC.get(r.carrier) || 0) + 1;
+            perC.set(r.carrier, n);
+            return n <= perCarrier;
+          })
+          .map((r) => ({
+            msisdn: r.msisdn, score: r.score, tags: r.tags, sim_type: r.sim_type,
+            carrier: r.carrier, tier: r.tier, best_grade: r.best_grade, available: r.available,
+            first_seen: r.first_seen, age_days: dayDiff(r.first_seen, today),
+          }))
+      );
+    }
+
     if (query.includes("row_number() over")) {
       const [perCarrier, today] = params;
       const perC = new Map();
@@ -125,20 +146,6 @@ export function fakeDb(seed = {}) {
         });
       }
       return reply(out);
-    }
-
-    if (query.includes("order by best_grade desc")) {
-      const [limit, today] = params;
-      return reply(
-        [...rows.values()]
-          .sort((a, b) => b.best_grade - a.best_grade || b.score - a.score || a.msisdn.localeCompare(b.msisdn))
-          .slice(0, limit)
-          .map((r) => ({
-            msisdn: r.msisdn, score: r.score, tags: r.tags, sim_type: r.sim_type,
-            carrier: r.carrier, tier: r.tier, best_grade: r.best_grade, available: r.available,
-            first_seen: r.first_seen, age_days: dayDiff(r.first_seen, today),
-          }))
-      );
     }
 
     if (query.includes("left(carrier, 1)")) {

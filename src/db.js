@@ -234,16 +234,23 @@ export async function readPublishRows({ perCarrier, today }, opts = {}) {
   return rows.map((r) => ({ ...r, tags: tagList(r.tags) }));
 }
 
-/** The dashboard's "best ever seen" rows: top `limit` by best_grade, available or not. */
-export async function readBestEverRows({ limit, today }, opts = {}) {
+/**
+ * The dashboard's "best ever seen" rows: the top `perCarrier` by best_grade for each
+ * carrier, available or not. Per carrier rather than a global top-N — see
+ * BEST_EVER_PER_CARRIER for what a global ranking did to Vodafone.
+ */
+export async function readBestEverRows({ perCarrier, today }, opts = {}) {
   const rows = await sql(
     `select msisdn, score, tags, sim_type, carrier, tier, best_grade, available,
             to_char(first_seen, 'YYYY-MM-DD') as first_seen,
             ($2::date - first_seen) as age_days
-     from numbers
-     order by best_grade desc, score desc, msisdn
-     limit $1`,
-    [limit, today],
+     from (
+       select *, row_number() over (partition by carrier order by best_grade desc, score desc, msisdn) as rn
+       from numbers
+     ) ranked
+     where rn <= $1
+     order by best_grade desc, score desc, msisdn`,
+    [perCarrier, today],
     opts
   );
   return rows.map((r) => ({ ...r, tags: tagList(r.tags) }));

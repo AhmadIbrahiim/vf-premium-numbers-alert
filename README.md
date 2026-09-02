@@ -75,7 +75,7 @@ Served from `gh-pages`, same-origin:
 |---|---|---|---|
 | `latest.json` | on load | ~3.2MB | ranked rows for browsing + the LLM's best 30 |
 | `index.json` | first search | ~3.5MB | **every** available number (`<msisdn><carrier initial><score>`) |
-| `best-ever.json` | "best ever" tab | ~3.9MB | top by `best_grade`, available or not |
+| `best-ever.json` | "best ever" tab | ~3.9MB | top by `best_grade` per carrier, available or not |
 | `events.jsonl.json` | on load | ~45KB | recent change timeline |
 
 So browsing shows the top-ranked numbers, and searching digits reaches all ~206k.
@@ -109,7 +109,7 @@ Set as workflow `env:` or repo variables (all optional):
 | `CANDIDATE_COUNT` | `150` | How many top-scored numbers the LLM ranks |
 | `BEST_COUNT` | `30` | How many to surface |
 | `PUBLISH_PER_CARRIER` | `7000` | Rich ranked rows per carrier in `latest.json` — per carrier, so Etisalat's tier bonus can't crowd out Vodafone's whole 5.2k catalog |
-| `BEST_EVER_LIMIT` | `20000` | Rows in `best-ever.json` |
+| `BEST_EVER_PER_CARRIER` | `7000` | Rows in `best-ever.json` **per carrier** — global ranking left only 374 of Vodafone's 5,202 numbers in that view |
 | `CHANGE_LIST_LIMIT` | `2000` | Cap on the new/disappeared lists in `latest.json` (the counts stay exact) |
 | `HISTORY_KEEP_DAYS` | `30` | Delete rows gone longer than this |
 | `VF_TYPES` | `red,flex` | Vodafone line-type catalog paths to page |

@@ -58,8 +58,13 @@ export const BEST_COUNT = Number(process.env.BEST_COUNT || 30);
  * compact `index.json` (~15 bytes each).
  */
 export const PUBLISH_PER_CARRIER = intEnv("PUBLISH_PER_CARRIER", 7000);
-/** Rows in best-ever.json (top by best_grade, available or not). */
-export const BEST_EVER_LIMIT = intEnv("BEST_EVER_LIMIT", 20000);
+/**
+ * Rows in best-ever.json, **per carrier**. A global top-N does not work here for the
+ * same reason it did not for latest.json: Etisalat's tier bonus lifts its scores, so a
+ * global top 20,000 by best_grade came out 16,661 Etisalat / 2,965 WE / 374 Vodafone —
+ * i.e. 93% of Vodafone's 5,202 numbers were missing from the "best ever seen" view.
+ */
+export const BEST_EVER_PER_CARRIER = intEnv("BEST_EVER_PER_CARRIER", 7000);
 /** Cap on the new/disappeared msisdn lists in latest.json (the counts stay exact). */
 export const CHANGE_LIST_LIMIT = intEnv("CHANGE_LIST_LIMIT", 2000);
 /** Delete rows gone for longer than this, so the table doesn't grow without bound. */

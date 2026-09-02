@@ -172,10 +172,27 @@ test("readBestEverRows ranks by best_grade and includes gone numbers", async () 
   await db.upsertNumbers({ rows: ROWS, today: "2026-09-02", runSeq: 1 }, opts(fake));
   await db.applyGrades({ grades: new Map([["01512345678", 99]]) }, opts(fake));
   await db.markGone({ runSeq: 2, carriers: ALL_CARRIERS }, opts(fake)); // everything gone
-  const rows = await db.readBestEverRows({ limit: 2, today: "2026-09-02" }, opts(fake));
-  assert.deepEqual(rows.map((r) => r.msisdn), ["01512345678", "01112345678"]);
+  const rows = await db.readBestEverRows({ perCarrier: 1, today: "2026-09-02" }, opts(fake));
+  assert.deepEqual(rows.map((r) => r.msisdn), ["01512345678", "01112345678", "01012345678"]);
   assert.equal(rows[0].best_grade, 99);
   assert.equal(rows[0].available, false);
+});
+
+test("readBestEverRows gives each carrier its own slice, not a global top-N", async () => {
+  // 5 high-grade Etisalat numbers vs 2 low-grade Vodafone ones. A global top-3 would be
+  // all Etisalat; per-carrier must still surface Vodafone (the live bug: a global top
+  // 20,000 left only 374 of Vodafone's 5,202 numbers in the "best ever" view).
+  const et = Array.from({ length: 5 }, (_, i) => ({
+    msisdn: `0110000000${i}`, carrier: "etisalat", tier: "", sim_type: "", score: 59, tags: [],
+  }));
+  const vf = Array.from({ length: 2 }, (_, i) => ({
+    msisdn: `0100000000${i}`, carrier: "vodafone", tier: "", sim_type: "", score: 12, tags: [],
+  }));
+  const fake = fakeDb();
+  await db.upsertNumbers({ rows: [...et, ...vf], today: "2026-09-02", runSeq: 1 }, opts(fake));
+  const rows = await db.readBestEverRows({ perCarrier: 2, today: "2026-09-02" }, opts(fake));
+  assert.equal(rows.filter((r) => r.carrier === "vodafone").length, 2, "Vodafone must not be crowded out");
+  assert.equal(rows.filter((r) => r.carrier === "etisalat").length, 2);
 });
 
 test("readSearchIndex emits fixed-width msisdn + carrier initial + 3-digit score", async () => {

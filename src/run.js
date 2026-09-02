@@ -16,7 +16,7 @@ import { sendPremiumEmail } from "./email.js";
 import {
   DATA_DIR, MODEL, GITHUB_TOKEN, REPO,
   CANDIDATE_COUNT, BEST_COUNT, ALERT_THRESHOLD,
-  PUBLISH_PER_CARRIER, BEST_EVER_LIMIT, HISTORY_KEEP_DAYS, CARRIER_SHRINK_TOLERANCE,
+  PUBLISH_PER_CARRIER, BEST_EVER_PER_CARRIER, HISTORY_KEEP_DAYS, CARRIER_SHRINK_TOLERANCE,
   todayInTz, tierBonus,
 } from "./config.js";
 
@@ -184,7 +184,7 @@ export async function run({ fetchImpl, dbFetch } = {}) {
   const [counts, publishRows, bestEver, searchIndex] = await Promise.all([
     db.readCounts(dbOpts),
     db.readPublishRows({ perCarrier: PUBLISH_PER_CARRIER, today }, dbOpts),
-    db.readBestEverRows({ limit: BEST_EVER_LIMIT, today }, dbOpts),
+    db.readBestEverRows({ perCarrier: BEST_EVER_PER_CARRIER, today }, dbOpts),
     db.readSearchIndex(dbOpts),
   ]);
 
