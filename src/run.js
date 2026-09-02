@@ -71,7 +71,14 @@ export async function run({ fetchImpl, dbFetch } = {}) {
     return { skipped: "fetch-failed" };
   }
 
-  const { records, totalElements, returned } = catalog;
+  const { records, totalElements, returned, ok: okCarriers, failed } = catalog;
+  if (failed?.length) {
+    // Those carriers keep their existing rows: not refreshed, but not wrongly retired.
+    await summary(
+      `⚠️ carried over ${failed.map((f) => f.carrier).join(", ")} (fetch failed: ` +
+      `${failed.map((f) => f.error).join(" | ")})`
+    );
+  }
   if (totalElements > returned) {
     await summary(`⚠️ truncation: returned ${returned} < totalElements ${totalElements}. Increase size=.`);
   }
@@ -105,8 +112,9 @@ export async function run({ fetchImpl, dbFetch } = {}) {
   }
   const available = rows.map((r) => r.msisdn);
 
-  // 3. diff against what Postgres last saw available
-  const priorAvailable = await db.readAvailable(dbOpts);
+  // 3. diff against what Postgres last saw available, scoped to the carriers we
+  // actually fetched — otherwise a throttled carrier reads as a mass disappearance.
+  const priorAvailable = await db.readAvailable(dbOpts, { carriers: okCarriers });
   const priorHistory = Object.fromEntries(priorAvailable.map((m) => [m, { status: "available" }]));
   const diff = computeDiff({ current: available, history: priorHistory });
 
@@ -118,7 +126,7 @@ export async function run({ fetchImpl, dbFetch } = {}) {
 
   // 4. persist every number the carriers listed, then flag the ones that vanished
   await db.upsertNumbers({ rows, today, runSeq }, dbOpts);
-  await db.markGone({ runSeq }, dbOpts);
+  await db.markGone({ runSeq, carriers: okCarriers }, dbOpts);
 
   // 5. candidates -> LLM grade -> best thirty
   // Candidates = top-N by deterministic score, plus the best NEW numbers (never skip a
@@ -208,6 +216,7 @@ export async function run({ fetchImpl, dbFetch } = {}) {
   await summary(
     `✅ run ok | total=${totalElements} available=${available.length} published=${latest.published_count} ` +
     `new=${diff.newMsisdns.length} gone=${diff.disappearedMsisdns.length} pruned=${pruned} ` +
+    `carriers=${okCarriers.join("+")}${failed?.length ? `/failed:${failed.map((f) => f.carrier).join(",")}` : ""} ` +
     `baseline=${diff.isBaseline} llm=${regraded ? "graded" : "cached"} ` +
     `alerts=${newPremium.length} (issue:${notifyResult} email:${emailResult}) changed=${changed}`
   );

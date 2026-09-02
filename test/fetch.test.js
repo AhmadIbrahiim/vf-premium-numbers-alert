@@ -344,15 +344,30 @@ test("fetchAll merges Vodafone, Etisalat, and WE records", async () => {
   assert.equal(returned, 2 + 2 + 1);
 });
 
-test("fetchAll rejects when Etisalat hard-fails", async () => {
-  const fetchImpl = async (url) => {
+test("fetchAll reports a failed carrier instead of losing the whole poll", async () => {
+  const fetchImpl = async (url, init) => {
     if (url.includes("eshop.vodafone")) {
-      return { ok: true, status: 200, json: async () => ({ content: [], totalElements: 0 }) };
+      return { ok: true, status: 200, json: async () => ({ content: [{ id: "1", msisdn: "01055455833", available: true, defaultPrice: { amount: 5 }, simType: "ESIM", tariffs: [] }], totalElements: 1 }) };
     }
     if (url.includes("numbers.te.eg")) {
-      return { ok: true, status: 200, json: async () => ({ header: { retCode: "0" }, body: { telnumlist: [] } }) };
+      const b = JSON.parse(init.body);
+      const list = Number(b.pageindex) === 1 ? [{ telnum: 1555027138 }] : [];
+      return { ok: true, status: 200, json: async () => ({ header: { retCode: "0" }, body: { telnumlist: list } }) };
     }
-    return { ok: false, status: 500, json: async () => ({}) };
+    return { ok: false, status: 500, json: async () => ({}) }; // Etisalat down
   };
-  await assert.rejects(() => fetchAll({ fetchImpl, retries: 0, gradeMin: 17, gradeMax: 17 }));
+  const { records, ok, failed } = await fetchAll({ fetchImpl, retries: 0, gradeMin: 17, gradeMax: 17 });
+  assert.deepEqual(ok.sort(), ["vodafone", "we"]);
+  assert.deepEqual(failed.map((f) => f.carrier), ["etisalat"]);
+  assert.match(failed[0].error, /fetchEtisalat/);
+  // The carriers that did answer still come through.
+  assert.deepEqual(records.map((r) => r.carrier).sort(), ["vodafone", "we"]);
+});
+
+test("fetchAll rejects only when every carrier fails", async () => {
+  const fetchImpl = async () => ({ ok: false, status: 500, json: async () => ({}) });
+  await assert.rejects(
+    () => fetchAll({ fetchImpl, retries: 0, gradeMin: 17, gradeMax: 17 }),
+    /every carrier failed/
+  );
 });

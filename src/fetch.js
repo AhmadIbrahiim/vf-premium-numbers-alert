@@ -448,17 +448,46 @@ export async function fetchWe(opts = {}) {
 }
 
 /**
- * Fetch all carriers (Vodafone + Etisalat + WE) and merge. Rejects if ANY source rejects,
- * so the caller skips the run and never overwrites good data with a partial set.
+ * Fetch all carriers (Vodafone + Etisalat + WE) and merge.
+ *
+ * Partial success is reported, not thrown: WE needs ~3,500 requests a poll and will
+ * occasionally throttle us into connect timeouts. Losing every carrier's update because
+ * one refused is worse than carrying that one over — state is per-row in Postgres, so
+ * the caller updates the carriers in `ok` and leaves the others exactly as they were
+ * (see how run.js scopes the diff and markGone). Rejects only if EVERY source fails,
+ * which is the case where continuing really would corrupt the picture.
  *
  * @param {object} [opts] - forwarded to each fetcher (e.g. fetchImpl, retries, gradeMin/gradeMax)
- * @returns {Promise<{ records: Record[], totalElements: number, returned: number }>}
+ * @returns {Promise<{ records: Record[], totalElements: number, returned: number,
+ *   ok: string[], failed: Array<{carrier:string, error:string}> }>}
  */
 export async function fetchAll(opts = {}) {
-  const [vf, et, we] = await Promise.all([fetchVodafone(opts), fetchEtisalat(opts), fetchWe(opts)]);
-  return {
-    records: [...vf.records, ...et.records, ...we.records],
-    totalElements: vf.totalElements + et.totalElements + we.totalElements,
-    returned: vf.returned + et.returned + we.returned,
-  };
+  const sources = [
+    ["vodafone", fetchVodafone],
+    ["etisalat", fetchEtisalat],
+    ["we", fetchWe],
+  ];
+  const settled = await Promise.allSettled(sources.map(([, fn]) => fn(opts)));
+
+  const records = [];
+  const ok = [];
+  const failed = [];
+  let totalElements = 0;
+  let returned = 0;
+  settled.forEach((result, i) => {
+    const carrier = sources[i][0];
+    if (result.status === "fulfilled") {
+      ok.push(carrier);
+      records.push(...result.value.records);
+      totalElements += result.value.totalElements;
+      returned += result.value.returned;
+    } else {
+      failed.push({ carrier, error: result.reason?.message || String(result.reason) });
+    }
+  });
+
+  if (!ok.length) {
+    throw new Error(`every carrier failed: ${failed.map((f) => `${f.carrier}: ${f.error}`).join(" | ")}`);
+  }
+  return { records, totalElements, returned, ok, failed };
 }

@@ -102,9 +102,15 @@ function tagList(value) {
   return value.filter(Boolean);
 }
 
-/** The msisdns currently marked available — the "prior available set" for diffing. */
-export async function readAvailable(opts = {}) {
-  const rows = await sql("select msisdn from numbers where available", [], opts);
+/**
+ * The msisdns currently marked available — the "prior available set" for diffing.
+ * Pass `carriers` to scope it to the carriers this run fetched, so a carrier that
+ * failed does not show up as a mass disappearance.
+ */
+export async function readAvailable(opts = {}, { carriers } = {}) {
+  const rows = carriers?.length
+    ? await sql("select msisdn from numbers where available and carrier = any($1::text[])", [carriers], opts)
+    : await sql("select msisdn from numbers where available", [], opts);
   return rows.map((r) => r.msisdn);
 }
 
@@ -163,11 +169,20 @@ export async function upsertNumbers({ rows, today, runSeq }, opts = {}) {
   }
 }
 
-/** Flag every still-available row this run didn't touch as gone. Returns the count. */
-export async function markGone({ runSeq }, opts = {}) {
+/**
+ * Flag every still-available row this run didn't touch as gone, restricted to the
+ * carriers we actually fetched. A carrier that failed (throttled, down) keeps its rows
+ * untouched rather than having its whole inventory declared gone.
+ *
+ * @param {object} p - { runSeq, carriers: string[] }
+ * @returns {Promise<string[]>} the msisdns marked gone
+ */
+export async function markGone({ runSeq, carriers }, opts = {}) {
+  if (!carriers || !carriers.length) return [];
   const rows = await sql(
-    "update numbers set available = false where available and run_seq <> $1 returning msisdn",
-    [runSeq],
+    `update numbers set available = false
+     where available and run_seq <> $1 and carrier = any($2::text[]) returning msisdn`,
+    [runSeq, carriers],
     opts
   );
   return rows.map((r) => r.msisdn);

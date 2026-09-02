@@ -35,7 +35,12 @@ export function fakeDb(seed = {}) {
     if (/^\s*create /i.test(query)) return reply([]);
 
     if (query.includes("select msisdn from numbers where available")) {
-      return reply([...rows.values()].filter((r) => r.available).map((r) => ({ msisdn: r.msisdn })));
+      const carriers = query.includes("carrier = any") ? params[0] : null;
+      return reply(
+        [...rows.values()]
+          .filter((r) => r.available && (!carriers || carriers.includes(r.carrier)))
+          .map((r) => ({ msisdn: r.msisdn }))
+      );
     }
 
     if (query.includes("insert into numbers")) {
@@ -60,9 +65,10 @@ export function fakeDb(seed = {}) {
     }
 
     if (query.includes("set available = false")) {
-      const [runSeq] = params;
+      const [runSeq, carriers] = params;
       const gone = [];
       for (const r of rows.values()) {
+        if (carriers && !carriers.includes(r.carrier)) continue;
         if (r.available && r.run_seq !== runSeq) {
           r.available = false;
           gone.push({ msisdn: r.msisdn });
