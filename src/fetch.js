@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
-  ENDPOINT,
+  VF_TYPES,
+  vodafoneEndpoint,
   X_CONTEXT_REQUEST,
   USER_AGENT,
   REFERER,
@@ -9,6 +10,9 @@ import {
   ETISALAT_APP_NAME,
   ETISALAT_APP_PASSWORD,
   ETISALAT_POOLS,
+  ETISALAT_PREFIX,
+  ETISALAT_RESPONSE_CAP,
+  ETISALAT_MAX_DEPTH,
   WE_ENDPOINT,
   WE_CHANNEL_ID,
   WE_DEVICE_ID,
@@ -19,6 +23,7 @@ import {
   WE_GRADE_MAX,
   WE_PAGE_SIZE,
   WE_MAX_PAGES,
+  WE_CONCURRENCY,
   weGradeSlug,
 } from "./config.js";
 
@@ -62,9 +67,9 @@ const PAGE_SIZE = 2000;
 /** Safety bound on pagination (50k numbers) so a bad totalElements can't loop forever. */
 const MAX_PAGES = 25;
 
-/** Clone ENDPOINT with size/page forced to fetch one page of the paginated catalog. */
-function pageUrl(page) {
-  const url = new URL(ENDPOINT);
+/** Catalog URL for one line type with size/page forced for the pager. */
+function pageUrl(type, page) {
+  const url = new URL(vodafoneEndpoint(type));
   url.searchParams.set("size", String(PAGE_SIZE));
   url.searchParams.set("page", String(page));
   return url.toString();
@@ -105,12 +110,13 @@ export async function fetchVodafone(opts = {}) {
   const baseDelayMs = opts.baseDelayMs ?? 1000;
   const timeoutMs = opts.timeoutMs ?? 45000;
   const maxPages = opts.maxPages ?? MAX_PAGES;
+  const types = opts.types || VF_TYPES;
 
-  // Fetch a single page (with retry/backoff); throws on persistent failure.
-  async function fetchPage(page) {
+  // Fetch a single page of one line type (with retry/backoff); throws on persistent failure.
+  async function fetchPage(type, page) {
     return fetchJsonWithRetry({
       doFetch,
-      url: pageUrl(page),
+      url: pageUrl(type, page),
       headers: {
         accept: "application/json",
         "content-type": "application/json",
@@ -123,28 +129,40 @@ export async function fetchVodafone(opts = {}) {
       retries,
       baseDelayMs,
       timeoutMs,
-      label: `fetchVodafone page ${page}`,
+      label: `fetchVodafone ${type} page ${page}`,
     });
   }
 
-  const raw = [];
+  const byMsisdn = new Map(); // msisdn -> Record (first line type wins)
   let totalElements = 0;
-  for (let page = 0; page < maxPages; page++) {
-    const body = await fetchPage(page);
-    const content = Array.isArray(body?.content) ? body.content : [];
-    if (page === 0) totalElements = Number(body?.totalElements ?? 0);
-    raw.push(...content);
-    // Stop when the catalog is exhausted: a short/empty page is the last one, or
-    // we've already collected everything the server says exists.
-    if (content.length < PAGE_SIZE) break;
-    if (totalElements && raw.length >= totalElements) break;
+  let returned = 0;
+  for (const type of types) {
+    let seen = 0;
+    let typeTotal = 0;
+    for (let page = 0; page < maxPages; page++) {
+      const body = await fetchPage(type, page);
+      const content = Array.isArray(body?.content) ? body.content : [];
+      if (page === 0) typeTotal = Number(body?.totalElements ?? 0);
+      seen += content.length;
+      for (const raw of content) {
+        const r = parseRecord(raw);
+        if (!MSISDN_RE.test(r.msisdn)) continue;
+        if (!byMsisdn.has(r.msisdn)) byMsisdn.set(r.msisdn, r);
+      }
+      // Stop when the catalog is exhausted: a short/empty page is the last one, or
+      // we've already collected everything the server says exists.
+      if (content.length < PAGE_SIZE) break;
+      if (typeTotal && seen >= typeTotal) break;
+    }
+    totalElements += typeTotal || seen;
+    returned += seen;
   }
 
-  const records = raw.map(parseRecord).filter((r) => MSISDN_RE.test(r.msisdn));
+  const records = [...byMsisdn.values()];
   if (!totalElements) totalElements = records.length;
-  // `returned` reflects how many the server actually handed us (pre-msisdn-filter),
-  // so the caller's truncation check fires only on genuine pagination shortfall.
-  return { records, totalElements, returned: raw.length };
+  // `returned` reflects how many the server actually handed us (pre-msisdn-filter,
+  // pre-dedupe), so the caller's truncation check fires only on genuine shortfall.
+  return { records, totalElements, returned };
 }
 
 /**
@@ -161,6 +179,9 @@ export async function fetchEtisalat(opts = {}) {
   const baseDelayMs = opts.baseDelayMs ?? 1000;
   const timeoutMs = opts.timeoutMs ?? 45000;
   const pools = opts.pools || ETISALAT_POOLS;
+  const rootPrefix = opts.prefix ?? ETISALAT_PREFIX;
+  const cap = opts.responseCap ?? ETISALAT_RESPONSE_CAP;
+  const maxDepth = opts.maxDepth ?? ETISALAT_MAX_DEPTH;
 
   const headers = {
     accept: "application/json, text/plain, */*",
@@ -171,15 +192,26 @@ export async function fetchEtisalat(opts = {}) {
     applicationPassword: ETISALAT_APP_PASSWORD,
   };
 
-  const byMsisdn = new Map(); // msisdn -> { tier, bonus }
-  let returned = 0;
-  for (const pool of pools) {
-    const url = `${ETISALAT_ENDPOINT}&poolId=${pool.poolId}&searchPattern=*`;
+  /** One pool+pattern query -> the numbers array. */
+  async function query(poolId, pattern) {
+    const url = `${ETISALAT_ENDPOINT}&poolId=${poolId}&searchPattern=${encodeURIComponent(pattern + "*")}`;
     const body = await fetchJsonWithRetry({
       doFetch, url, headers, retries, baseDelayMs, timeoutMs,
-      label: `fetchEtisalat pool ${pool.poolId}`,
+      label: `fetchEtisalat pool ${poolId} pattern ${pattern}*`,
     });
-    const numbers = Array.isArray(body?.numbers) ? body.numbers : [];
+    return Array.isArray(body?.numbers) ? body.numbers : [];
+  }
+
+  const byMsisdn = new Map(); // msisdn -> { tier, bonus }
+  let returned = 0;
+  const truncated = [];
+
+  /**
+   * Collect one pool under `prefix`. A response at the server cap means there are
+   * more numbers than it will hand over, so split into `<prefix><digit>` and recurse.
+   */
+  async function collect(pool, prefix, depth) {
+    const numbers = await query(pool.poolId, prefix);
     returned += numbers.length;
     for (const n of numbers) {
       const msisdn = String(n);
@@ -187,6 +219,21 @@ export async function fetchEtisalat(opts = {}) {
       const prev = byMsisdn.get(msisdn);
       if (!prev || pool.bonus > prev.bonus) byMsisdn.set(msisdn, { tier: pool.tier, bonus: pool.bonus });
     }
+    if (numbers.length < cap) return; // complete for this prefix
+    if (depth >= maxDepth) { truncated.push(`${pool.poolId}:${prefix}*`); return; }
+    // Digits are independent sub-ranges; fetch the ten of them together.
+    await Promise.all(
+      "0123456789".split("").map((d) => collect(pool, prefix + d, depth + 1))
+    );
+  }
+
+  for (const pool of pools) await collect(pool, rootPrefix, 0);
+
+  if (truncated.length) {
+    console.warn(
+      `[fetchEtisalat] still at the response cap at max depth for ${truncated.join(", ")} ` +
+      `(raise ETISALAT_MAX_DEPTH to split further)`
+    );
   }
 
   const records = [...byMsisdn.entries()].map(([msisdn, { tier }]) => ({
@@ -231,10 +278,11 @@ function weHeaders() {
  * cap. Maps each telnum (integer, no leading 0) to an msisdn. Dedupes by msisdn (first grade
  * wins). Throws on a rejected query (retCode != "0") or transport failure.
  *
- * WE grades can hold many thousands of numbers, returned in a STABLE ascending numeric order.
- * Hitting WE_MAX_PAGES is therefore expected sampling, not unknown truncation: the first N
- * pages are the same set run-to-run, so a cap does not cause false "gone" churn. We log the
- * capped grades (raise WE_MAX_PAGES to pull deeper) rather than failing the whole run.
+ * WE grades can hold many thousands of numbers (the deepest observed runs ~392 pages),
+ * returned in a STABLE ascending numeric order. WE_MAX_PAGES is a safety bound well above
+ * real inventory; if a grade somehow still fills it, that is expected sampling rather than
+ * unknown truncation (the first N pages are the same set run-to-run, so a cap does not cause
+ * false "gone" churn). We log such grades rather than failing the whole run.
  *
  * @param {object} [opts] - { fetchImpl, retries=4, baseDelayMs=1000, timeoutMs=45000, gradeMin, gradeMax }
  * @returns {Promise<{ records: Record[], totalElements: number, returned: number }>}
@@ -246,6 +294,24 @@ export async function fetchWe(opts = {}) {
   const timeoutMs = opts.timeoutMs ?? 45000;
   const gradeMin = opts.gradeMin ?? WE_GRADE_MIN;
   const gradeMax = opts.gradeMax ?? WE_GRADE_MAX;
+  const maxPages = opts.maxPages ?? WE_MAX_PAGES;
+  const concurrency = Math.max(1, opts.concurrency ?? WE_CONCURRENCY);
+
+  /** One page of one grade -> the telnumlist. Throws if WE rejects the query. */
+  async function fetchPage(grade, page) {
+    const body = await fetchJsonWithRetry({
+      doFetch,
+      url: WE_ENDPOINT,
+      method: "POST",
+      headers: weHeaders(),
+      body: JSON.stringify({ fitmod: "15????????", maxCount: String(WE_PAGE_SIZE), pageindex: String(page), numberlevel: grade }),
+      retries, baseDelayMs, timeoutMs,
+      label: `fetchWe ${grade} p${page}`,
+    });
+    const retCode = String(body?.header?.retCode ?? "");
+    if (retCode !== "0") throw new Error(`fetchWe ${grade} rejected: retCode ${retCode}`);
+    return Array.isArray(body?.body?.telnumlist) ? body.body.telnumlist : [];
+  }
 
   const byMsisdn = new Map(); // msisdn -> grade slug (first grade wins)
   let returned = 0;
@@ -254,35 +320,28 @@ export async function fetchWe(opts = {}) {
   for (let g = gradeMin; g <= gradeMax; g++) {
     const grade = weGradeSlug(g);
     let exhausted = false;
-    for (let page = 1; page <= WE_MAX_PAGES; page++) {
-      const body = await fetchJsonWithRetry({
-        doFetch,
-        url: WE_ENDPOINT,
-        method: "POST",
-        headers: weHeaders(),
-        body: JSON.stringify({ fitmod: "15????????", maxCount: String(WE_PAGE_SIZE), pageindex: String(page), numberlevel: grade }),
-        retries, baseDelayMs, timeoutMs,
-        label: `fetchWe ${grade} p${page}`,
-      });
-      const retCode = String(body?.header?.retCode ?? "");
-      if (retCode !== "0") {
-        throw new Error(`fetchWe ${grade} rejected: retCode ${retCode}`);
+    // Pages are independent, so pull them `concurrency` at a time; a short page in
+    // the batch is the end of this grade's inventory.
+    for (let page = 1; page <= maxPages && !exhausted; page += concurrency) {
+      const batch = [];
+      for (let i = 0; i < concurrency && page + i <= maxPages; i++) batch.push(page + i);
+      const lists = await Promise.all(batch.map((p) => fetchPage(grade, p)));
+      for (const list of lists) {
+        returned += list.length;
+        for (const item of list) {
+          const msisdn = "0" + String(item?.telnum ?? "");
+          if (!MSISDN_RE.test(msisdn)) continue;
+          if (!byMsisdn.has(msisdn)) byMsisdn.set(msisdn, grade);
+        }
+        if (list.length < WE_PAGE_SIZE) exhausted = true;
       }
-      const list = Array.isArray(body?.body?.telnumlist) ? body.body.telnumlist : [];
-      returned += list.length;
-      for (const item of list) {
-        const msisdn = "0" + String(item?.telnum ?? "");
-        if (!MSISDN_RE.test(msisdn)) continue;
-        if (!byMsisdn.has(msisdn)) byMsisdn.set(msisdn, grade);
-      }
-      if (list.length < WE_PAGE_SIZE) { exhausted = true; break; } // last page for this grade
     }
     // Best-effort: a grade still full at the cap is sampled (stable numeric order), not failed.
     if (!exhausted) cappedGrades.push(grade);
   }
   if (cappedGrades.length) {
     console.warn(
-      `[fetchWe] sampled first ${WE_MAX_PAGES} pages for ${cappedGrades.join(", ")} ` +
+      `[fetchWe] sampled first ${maxPages} pages for ${cappedGrades.join(", ")} ` +
       `(inventory exceeds the cap; raise WE_MAX_PAGES to pull deeper)`
     );
   }

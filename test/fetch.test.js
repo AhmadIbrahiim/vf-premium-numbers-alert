@@ -72,6 +72,47 @@ test("fetchEtisalat drops malformed msisdns", async () => {
   assert.deepEqual(records.map((r) => r.msisdn), ["01100000001"]);
 });
 
+test("fetchEtisalat splits the prefix when a response comes back at the cap", async () => {
+  // Pool holds 3 numbers under 0110x; a cap of 2 forces the "0110*" query to split
+  // into "01100*".."01109*". Without splitting we would only ever see 2 of the 3.
+  const pool = ["01100000001", "01101000002", "01102000003"];
+  const seen = [];
+  const fetchImpl = async (url) => {
+    const pattern = new URL(url).searchParams.get("searchPattern");
+    seen.push(pattern);
+    const prefix = pattern.replace("*", "");
+    const hits = pool.filter((n) => n.startsWith(prefix));
+    return { ok: true, status: 200, json: async () => ({ status: true, numbers: hits.slice(0, 2) }) };
+  };
+  const { records } = await fetchEtisalat({
+    fetchImpl,
+    pools: [{ poolId: 135, tier: "silver", bonus: 0 }],
+    prefix: "0110",
+    responseCap: 2,
+    maxDepth: 2,
+  });
+  assert.deepEqual(records.map((r) => r.msisdn).sort(), pool);
+  assert.ok(seen.includes("01100*"), "expected the capped prefix to be split by digit");
+});
+
+test("fetchEtisalat does not split a response below the cap", async () => {
+  const fetchImpl = etisalatFetch({ 135: ["01100000001"] });
+  let calls = 0;
+  const counting = async (u) => { calls++; return fetchImpl(u); };
+  await fetchEtisalat({ fetchImpl: counting, pools: [{ poolId: 135, tier: "silver", bonus: 0 }] });
+  assert.equal(calls, 1);
+});
+
+test("fetchWe pages past the old 20-page cap", async () => {
+  // 25 full pages then a short one: the whole grade must come back, not the first 20 pages.
+  const pages = Array.from({ length: 25 }, (_, p) =>
+    Array.from({ length: WE_PAGE_SIZE }, (_, i) => 1500000000 + p * WE_PAGE_SIZE + i)
+  );
+  pages.push([1599999999]);
+  const { records } = await fetchWe({ fetchImpl: weFetch({ GRADE_017: pages }), gradeMin: 17, gradeMax: 17 });
+  assert.equal(records.length, 25 * WE_PAGE_SIZE + 1);
+});
+
 test("fetchEtisalat throws when a pool hard-fails (4xx)", async () => {
   const fetchImpl = async () => ({ ok: false, status: 403, json: async () => ({}) });
   await assert.rejects(
@@ -186,9 +227,11 @@ test("fetchAll merges Vodafone, Etisalat, and WE records", async () => {
   const carriers = [...new Set(records.map((r) => r.carrier))].sort();
   assert.deepEqual(carriers, ["etisalat", "vodafone", "we"]);
   assert.ok(records.some((r) => r.msisdn === "01555027138" && r.carrier === "we"));
+  // The fake serves the same single VF record for every line type, so both VF_TYPES
+  // (red, flex) return it: 1 deduped record, but 2 counted as fetched/reported.
   assert.equal(records.length, 1 + 2 + 1);
-  assert.equal(totalElements, 1 + 2 + 1);
-  assert.equal(returned, 1 + 2 + 1);
+  assert.equal(totalElements, 2 + 2 + 1);
+  assert.equal(returned, 2 + 2 + 1);
 });
 
 test("fetchAll rejects when Etisalat hard-fails", async () => {

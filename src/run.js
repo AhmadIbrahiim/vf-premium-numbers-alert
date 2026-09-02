@@ -7,13 +7,15 @@ import { scoreMsisdn } from "./score.js";
 import { computeDiff } from "./diff.js";
 import { gradeCandidates } from "./grade.js";
 import {
-  readState, updateHistory, buildLatest, appendEvents, writeState,
+  readState, buildLatest, appendEvents, writeState,
   buildCandidates, candidateSignature, gradeCacheValid, readGrades, writeGrades,
 } from "./store.js";
+import * as db from "./db.js";
 import { notify } from "./notify.js";
 import {
   DATA_DIR, MODEL, GITHUB_TOKEN, REPO,
   CANDIDATE_COUNT, BEST_COUNT, ALERT_THRESHOLD,
+  PUBLISH_PER_CARRIER, BEST_EVER_LIMIT, HISTORY_KEEP_DAYS,
   todayInTz, tierBonus,
 } from "./config.js";
 
@@ -42,9 +44,21 @@ async function summary(text) {
   }
 }
 
-export async function run({ fetchImpl } = {}) {
+export async function run({ fetchImpl, dbFetch } = {}) {
+  // Tests inject `dbFetch` to stand in for Neon's SQL-over-HTTP endpoint.
+  const dbOpts = dbFetch ? { fetchImpl: dbFetch } : {};
   const today = todayInTz();
   const generatedAt = new Date().toISOString();
+  // Monotonic marker for this run: every row we upsert carries it, so the rows left
+  // holding an older one are exactly the numbers that disappeared.
+  const runSeq = Date.now();
+
+  if (!db.hasDb()) {
+    await summary("⚠️ DATABASE_URL is not set — refusing to run (number state lives in Postgres).");
+    await emitOutput("changed", "false");
+    return { skipped: "no-database" };
+  }
+  await db.migrate(dbOpts);
 
   // 1. fetch (skip the run on failure — never overwrite good data)
   let catalog;
@@ -61,12 +75,12 @@ export async function run({ fetchImpl } = {}) {
     await summary(`⚠️ truncation: returned ${returned} < totalElements ${totalElements}. Increase size=.`);
   }
 
-  // 2. score (+ Etisalat tier bonus) + available set
+  // 2. score (+ Etisalat tier bonus)
   const scoreMap = new Map();
-  const simTypeMap = new Map(); // msisdn -> "ESIM" | "PHYSICAL" (Vodafone line source)
-  const carrierMap = new Map(); // msisdn -> "vodafone" | "etisalat" | "we"
-  const tierMap = new Map();    // msisdn -> Etisalat tier slug / WE grade code ("" for Vodafone)
+  const tierMap = new Map(); // msisdn -> Etisalat tier slug / WE grade code ("" for Vodafone)
+  const rows = [];
   for (const r of records) {
+    if (!r.available) continue;
     const base = scoreMsisdn(r.msisdn);
     const tier = r.tier || "";
     const isEtisalat = r.carrier === "etisalat";
@@ -74,16 +88,24 @@ export async function run({ fetchImpl } = {}) {
     // display metadata only — no bonus, no LLM tag (the digit-pattern scorer ranks it).
     const bonus = isEtisalat ? tierBonus(tier) : 0;
     const tags = isEtisalat && tier ? [...base.tags, `etisalat-${tier}`] : base.tags;
-    scoreMap.set(r.msisdn, { score: Math.min(100, base.score + bonus), tags });
-    simTypeMap.set(r.msisdn, r.simType);
-    carrierMap.set(r.msisdn, r.carrier || "vodafone");
+    const score = Math.min(100, base.score + bonus);
+    scoreMap.set(r.msisdn, { score, tags });
     tierMap.set(r.msisdn, tier);
+    rows.push({
+      msisdn: r.msisdn,
+      carrier: r.carrier || "vodafone",
+      tier,
+      sim_type: r.simType || "",
+      score,
+      tags,
+    });
   }
-  const available = records.filter((r) => r.available).map((r) => r.msisdn);
+  const available = rows.map((r) => r.msisdn);
 
-  // 3. read prior state + diff
-  const { history, events } = await readState(DATA_DIR);
-  const diff = computeDiff({ current: available, history });
+  // 3. diff against what Postgres last saw available
+  const priorAvailable = await db.readAvailable(dbOpts);
+  const priorHistory = Object.fromEntries(priorAvailable.map((m) => [m, { status: "available" }]));
+  const diff = computeDiff({ current: available, history: priorHistory });
 
   if (diff.suspicious) {
     await summary(`⚠️ suspicious shrink (now ${available.length}); skipping write/alerts this run.`);
@@ -91,8 +113,12 @@ export async function run({ fetchImpl } = {}) {
     return { skipped: "suspicious" };
   }
 
-  // 4. candidates -> LLM grade -> best thirty
-  // Candidates = top-N by deterministic score, plus all NEW numbers (never skip a
+  // 4. persist every number the carriers listed, then flag the ones that vanished
+  await db.upsertNumbers({ rows, today, runSeq }, dbOpts);
+  await db.markGone({ runSeq }, dbOpts);
+
+  // 5. candidates -> LLM grade -> best thirty
+  // Candidates = top-N by deterministic score, plus the best NEW numbers (never skip a
   // fresh arrival). The LLM only runs when this candidate set changed since last
   // run; otherwise we reuse cached grades (saves ~99% of calls on idle runs).
   const candidates = buildCandidates({
@@ -120,24 +146,32 @@ export async function run({ fetchImpl } = {}) {
     .filter((g) => availableSet.has(g.msisdn))
     .map((g) => ({ ...(scoreMap.get(g.msisdn) || {}), ...g }));
   const gradeMap = new Map(bestThirty.map((c) => [c.msisdn, c.grade]));
+  await db.applyGrades({ grades: gradeMap }, dbOpts);
 
-  // 5. persist
-  const nextHistory = updateHistory({ history, available, scoreMap, gradeMap, simTypeMap, carrierMap, tierMap, today });
+  // 6. publish: Postgres does the ranking, we just write the JSON the dashboard reads
+  const pruned = await db.pruneGone({ keepDays: HISTORY_KEEP_DAYS, today }, dbOpts);
+  const [counts, publishRows, bestEver, searchIndex] = await Promise.all([
+    db.readCounts(dbOpts),
+    db.readPublishRows({ perCarrier: PUBLISH_PER_CARRIER, today }, dbOpts),
+    db.readBestEverRows({ limit: BEST_EVER_LIMIT, today }, dbOpts),
+    db.readSearchIndex(dbOpts),
+  ]);
+
+  const { events } = await readState(DATA_DIR);
   const diffWithSet = { ...diff, newSet: new Set(diff.isBaseline ? [] : diff.newMsisdns) };
   const latest = buildLatest({
-    total: totalElements, bestThirty, history: nextHistory, diff: diffWithSet, today, generatedAt,
-    available, scoreMap, simTypeMap, carrierMap, tierMap,
+    generatedAt, total: totalElements, counts, bestThirty, publishRows, diff: diffWithSet, today,
   });
   const nextEvents = appendEvents(events, { today, generatedAt, diff: diffWithSet });
-  await writeState(DATA_DIR, { history: nextHistory, latest, events: nextEvents });
+  await writeState(DATA_DIR, { latest, events: nextEvents, bestEver, searchIndex });
 
-  // 6. alerts: NEW numbers that are highly graded (suppressed on baseline)
+  // 7. alerts: NEW numbers that are highly graded (suppressed on baseline)
   const newPremium = diff.isBaseline
     ? []
     : latest.best_thirty.filter((c) => c.is_new && c.grade >= ALERT_THRESHOLD);
   const notifyResult = await notify(newPremium, { token: GITHUB_TOKEN, repo: REPO });
 
-  // 7. change detection for commit gating
+  // 8. change detection for commit gating
   const sig = signature(available, bestThirty, tierMap);
   let prevSig = "";
   try { prevSig = (await readFile(join(DATA_DIR, "signature.txt"), "utf8")).trim(); } catch {}
@@ -146,8 +180,8 @@ export async function run({ fetchImpl } = {}) {
   await emitOutput("changed", String(changed));
 
   await summary(
-    `✅ run ok | total=${totalElements} available=${available.length} ` +
-    `new=${diff.newMsisdns.length} gone=${diff.disappearedMsisdns.length} ` +
+    `✅ run ok | total=${totalElements} available=${available.length} published=${latest.published_count} ` +
+    `new=${diff.newMsisdns.length} gone=${diff.disappearedMsisdns.length} pruned=${pruned} ` +
     `baseline=${diff.isBaseline} llm=${regraded ? "graded" : "cached"} ` +
     `alerts=${newPremium.length} (${notifyResult}) changed=${changed}`
   );

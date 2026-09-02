@@ -18,17 +18,21 @@ This is a **zero-dependency Node.js 20+ project using ES modules**.
 
 A parsed catalog record (produced by `src/fetch.js`):
 ```js
-/** @typedef {{ id: string, msisdn: string, available: boolean, price: number, tariffs: string[] }} Record */
+/** @typedef {{ id: string, msisdn: string, available: boolean, price: number, simType: string, tariffs: string[], carrier: string, tier: string }} Record */
 ```
 
 `msisdn` is an 11-digit Egyptian mobile string like `"01055455833"` (prefix `01[0125]` + 8 digits).
 "Premium" is judged purely on the digit pattern; price is flat (350 EGP) for all numbers.
 
-History entry (persisted in `history.json`, keyed by msisdn):
-```js
-/** @typedef {{ first_seen: string, last_seen: string, score: number, tags: string[], best_grade: number, status: "available"|"gone" }} HistoryEntry */
+Number state (one row per msisdn in Neon Postgres — see `src/db.js`):
+```sql
+numbers(msisdn text primary key, carrier text, tier text, sim_type text,
+        score int, tags text[], best_grade int,
+        first_seen date, last_seen date, available boolean, run_seq bigint)
 ```
-Dates are `YYYY-MM-DD` strings in Africa/Cairo time.
+`first_seen` is set on insert and never overwritten; `best_grade` only ever climbs;
+`run_seq` marks the run that last saw the row, which is how disappearances are found.
+Dates are `YYYY-MM-DD` in Africa/Cairo time.
 
 ## Module contracts (implement EXACTLY these signatures)
 

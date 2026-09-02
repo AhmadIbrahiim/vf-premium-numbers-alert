@@ -1,15 +1,16 @@
 /**
  * app.js — VF Premium Numbers Dashboard (Tailwind, light/dark, podium)
  *
- * Fetches ./latest.json and ./history.json (same-origin, no-store), then renders
- * a ranked, filterable, sortable view. Top 3 show as a podium; the rest as a list.
- * Two views: "best available now" and "best ever seen" (from history by best_grade).
+ * Fetches ./latest.json, ./best-ever.json and ./events.jsonl.json (same-origin,
+ * no-store), then renders a ranked, filterable, sortable view. Top 3 show as a
+ * podium; the rest as a list. Two views: "best available now" and "best ever seen".
  * XSS-safe: all dynamic text goes through textContent; innerHTML only for static SVG.
  */
 
 const state = {
   latest: null,
-  history: null,
+  bestEver: null,
+  searchIndex: null, // every available number, fixed-width "<msisdn><carrier><score>"
   events: null, // accumulated change events from events.jsonl.json
   view: "now", // "now" | "ever" | "changes"
   filter: "",
@@ -21,6 +22,8 @@ const state = {
 
 const INITIAL_RENDER_LIMIT = 300;
 const RENDER_STEP = 300;
+/** Cap on index-only search hits, so a 1-digit query can't render the whole catalog. */
+const SEARCH_MATCH_LIMIT = 2000;
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -180,13 +183,15 @@ function tagPills(row, max) {
 
 async function load() {
   try {
-    const [l, h, ev] = await Promise.all([
+    // best-ever.json / latest.json are slices Postgres ranked for us; the full table
+    // is one row per number ever seen and far too large to fetch here.
+    const [l, be, ev] = await Promise.all([
       fetch("./latest.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
-      fetch("./history.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : {})),
+      fetch("./best-ever.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : [])),
       fetch("./events.jsonl.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : [])),
     ]);
     state.latest = l;
-    state.history = h && typeof h === "object" ? h : {};
+    state.bestEver = Array.isArray(be) ? be : [];
     state.events = Array.isArray(ev) ? ev : [];
     state.error = false;
   } catch {
@@ -196,11 +201,66 @@ async function load() {
   render();
 }
 
+const CARRIER_BY_INITIAL = { v: "vodafone", e: "etisalat", w: "we" };
+
+/**
+ * Fetch the full-catalog search index once, on the first digit search. It covers every
+ * available number (~160k), which latest.json deliberately does not — that carries the
+ * top-ranked rows for browsing. Loaded lazily so the initial paint stays fast.
+ */
+async function ensureSearchIndex() {
+  if (state.searchIndex) return state.searchIndex;
+  try {
+    const r = await fetch("./index.json", { cache: "no-store" });
+    state.searchIndex = r.ok ? await r.json() : [];
+  } catch {
+    state.searchIndex = [];
+  }
+  if (!Array.isArray(state.searchIndex)) state.searchIndex = [];
+  return state.searchIndex;
+}
+
+/** Decode one fixed-width index record into a renderable row. */
+function indexRow(rec) {
+  const msisdn = rec.slice(0, 11);
+  const score = Number(rec.slice(12, 15)) || 0;
+  return {
+    msisdn,
+    grade: score,
+    score,
+    reason: "",
+    tags: [],
+    sim_type: "",
+    carrier: CARRIER_BY_INITIAL[rec[11]] || "",
+    tier: "",
+    is_new: false,
+    first_seen: "",
+    age_days: 0,
+  };
+}
+
+/**
+ * Digit search across the whole catalog: the ranked rows we already have, plus any
+ * index-only matches (numbers outside the published ranking). Capped so a short query
+ * can't try to render 100k rows.
+ */
+function searchMatches(digits, ranked) {
+  const have = new Set(ranked.map((r) => r.msisdn));
+  const out = [];
+  for (const rec of state.searchIndex || []) {
+    if (out.length >= SEARCH_MATCH_LIMIT) break;
+    if (!rec.includes(digits)) continue;
+    const msisdn = rec.slice(0, 11);
+    if (!msisdn.includes(digits) || have.has(msisdn)) continue;
+    out.push(indexRow(rec));
+  }
+  return out;
+}
+
 function bestEver() {
-  const h = state.history || {};
-  return Object.entries(h)
-    .map(([msisdn, e]) => ({
-      msisdn,
+  return (state.bestEver || [])
+    .map((e) => ({
+      msisdn: e.msisdn,
       grade: e.best_grade ?? e.score ?? 0,
       score: e.score ?? 0,
       reason: e.status === "gone" ? "no longer available" : "currently available",
@@ -236,7 +296,15 @@ function currentRows() {
     .filter((r) => r.msisdn);
   if (state.carrier !== "all") rows = rows.filter((r) => carrierOf(r) === state.carrier);
   const f = state.filter.replace(/\D/g, "");
-  if (f) rows = rows.filter((r) => r.msisdn.replace(/\D/g, "").includes(f));
+  if (f) {
+    rows = rows.filter((r) => r.msisdn.replace(/\D/g, "").includes(f));
+    // Extend a search past the published ranking into the full catalog index.
+    if (state.view === "now" && state.searchIndex) {
+      let extra = searchMatches(f, rows);
+      if (state.carrier !== "all") extra = extra.filter((r) => carrierOf(r) === state.carrier);
+      rows = [...rows, ...extra];
+    }
+  }
   const by = state.sort;
   rows.sort((a, b) => {
     if (by === "new") return (b.is_new ? 1 : 0) - (a.is_new ? 1 : 0) || b.grade - a.grade;
@@ -250,9 +318,14 @@ function currentRows() {
  * Build a change row from an msisdn + type (for the timeline view).
  * Falls back through best_thirty → history for grade/tags.
  */
+function bestEverIndex() {
+  if (!state._beIndex) state._beIndex = new Map((state.bestEver || []).map((e) => [e.msisdn, e]));
+  return state._beIndex;
+}
+
 function buildChangeRow(msisdn, type) {
   const msisdnStr = normalizedMsisdn(msisdn);
-  const h = state.history?.[msisdnStr] || {};
+  const h = bestEverIndex().get(msisdnStr) || {};
   const fromBest = (state.latest?.best_thirty || []).find((x) => x.msisdn === msisdnStr);
   const grade = fromBest?.grade ?? h.best_grade ?? h.score ?? 0;
   return {
@@ -399,7 +472,18 @@ function renderCount(total, filtered, rendered = total) {
   const base = rendered < total
     ? `${rendered}/${total} number${total === 1 ? "" : "s"}`
     : `${total} number${total === 1 ? "" : "s"}`;
-  $("count").textContent = base + (filtered ? " · filtered" : "");
+  // Ranked browsing covers the top N per carrier; searching covers the whole catalog.
+  // Say which, so a number missing from the list reads as "not top-ranked" rather
+  // than "never collected".
+  const availTotal = state.latest?.available_total ?? 0;
+  const published = state.latest?.published_count ?? 0;
+  let note = "";
+  if (state.view === "now" && published && availTotal > published) {
+    note = filtered
+      ? ` · searching all ${availTotal.toLocaleString()}`
+      : ` · top ${published.toLocaleString()} of ${availTotal.toLocaleString()} — search to reach the rest`;
+  }
+  $("count").textContent = base + note + (filtered ? " · filtered" : "");
 }
 
 function appendLoadMore(parent, remaining) {
@@ -584,7 +668,13 @@ function wire() {
   $("tab-now").addEventListener("click", () => setView("now"));
   $("tab-ever").addEventListener("click", () => setView("ever"));
   $("tab-changes").addEventListener("click", () => setView("changes"));
-  $("filter").addEventListener("input", (e) => { state.filter = e.target.value; state.renderLimit = INITIAL_RENDER_LIMIT; render(); });
+  $("filter").addEventListener("input", (e) => {
+    state.filter = e.target.value;
+    state.renderLimit = INITIAL_RENDER_LIMIT;
+    render();
+    // First search pulls the full-catalog index, then re-renders with its hits folded in.
+    if (state.filter.replace(/\D/g, "") && !state.searchIndex) ensureSearchIndex().then(render);
+  });
   $("sort").addEventListener("change", (e) => { state.sort = e.target.value; state.renderLimit = INITIAL_RENDER_LIMIT; render(); });
   $("carrier").addEventListener("change", (e) => { state.carrier = e.target.value; state.renderLimit = INITIAL_RENDER_LIMIT; render(); });
   $("theme").addEventListener("click", toggleTheme);

@@ -28,7 +28,7 @@ permissions:
 jobs:
   poll:
     runs-on: ubuntu-latest
-    timeout-minutes: 9
+    timeout-minutes: 9  # a full poll is ~3 min, almost all of it WE pagination
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -56,6 +56,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          # Number state lives in Neon Postgres; the run refuses to start without it.
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATA_DIR: public
           MODEL: openai/gpt-4o-mini
           # Manual "Run workflow" with regrade=true forces a full re-evaluation.
@@ -66,6 +68,8 @@ jobs:
         run: |
           cp web/index.html web/app.js web/tailwind.css public/
           rm -f public/styles.css
+          # Superseded by Postgres + best-ever.json/index.json; drop the stale 13MB blob.
+          rm -f public/history.json
           touch public/.nojekyll
 
       - name: Commit & push to gh-pages
