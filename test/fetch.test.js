@@ -344,6 +344,71 @@ test("fetchAll merges Vodafone, Etisalat, and WE records", async () => {
   assert.equal(returned, 2 + 2 + 1);
 });
 
+test("fetchWe rides out a spuriously short page instead of truncating the branch", async () => {
+  // Page 2 comes back short the first time it is asked for, then full. Believing the
+  // short page would stop at 2 numbers and lose pages 2-4 (the real-world bug: the same
+  // grade returned 61k, then 56k, then 53k).
+  const pages = [[1, 2], [3, 4], [5, 6], [7]].map((p) => p.map((n) => 1500000000 + n));
+  let page2Asks = 0;
+  const fetchImpl = async (_url, init) => {
+    const b = JSON.parse(init.body);
+    const idx = Number(b.pageindex) - 1;
+    let list = pages[idx] || [];
+    if (idx === 1 && ++page2Asks === 1) list = []; // one spurious empty page
+    return {
+      ok: true, status: 200,
+      json: async () => ({ header: { retCode: "0" }, body: { telnumlist: list.map((t) => ({ telnum: t })) } }),
+    };
+  };
+  const { records } = await fetchWe({
+    fetchImpl, gradeMin: 17, gradeMax: 17, pageSize: 2, queryCap: 1e9, maxPages: 20, concurrency: 1,
+  });
+  assert.equal(records.length, 7, "all four pages collected despite the hiccup");
+  assert.ok(page2Asks > 1, "the short page was re-checked, not trusted");
+});
+
+test("fetchWe still stops at a genuinely short final page", async () => {
+  const pages = [[1, 2], [3]].map((p) => p.map((n) => 1500000000 + n));
+  let asks = 0;
+  const fetchImpl = async (_url, init) => {
+    asks++;
+    const b = JSON.parse(init.body);
+    const list = pages[Number(b.pageindex) - 1] || [];
+    return {
+      ok: true, status: 200,
+      json: async () => ({ header: { retCode: "0" }, body: { telnumlist: list.map((t) => ({ telnum: t })) } }),
+    };
+  };
+  const { records, returned } = await fetchWe({
+    fetchImpl, gradeMin: 17, gradeMax: 17, pageSize: 2, queryCap: 1e9, maxPages: 20, concurrency: 1,
+  });
+  assert.equal(records.length, 3);
+  assert.equal(returned, 3, "the confirming re-read is not counted twice");
+  assert.ok(asks <= 4, "did not keep paging past the end");
+});
+
+test("fetchWe reports the branch incomplete when the hiccups never stop", async () => {
+  // Alternates short / full forever: past the budget this must be reported, not
+  // returned as if it were complete.
+  let n = 0;
+  const fetchImpl = async () => {
+    const list = ++n % 2 === 0 ? [{ telnum: 1500000000 + n }, { telnum: 1500000001 + n }] : [];
+    return { ok: true, status: 200, json: async () => ({ header: { retCode: "0" }, body: { telnumlist: list } }) };
+  };
+  const origWarn = console.warn;
+  const warnings = [];
+  console.warn = (m) => warnings.push(m);
+  try {
+    await fetchWe({
+      fetchImpl, gradeMin: 17, gradeMax: 17, pageSize: 2, queryCap: 1e9,
+      maxPages: 50, concurrency: 1, maxHiccups: 3,
+    });
+  } finally {
+    console.warn = origWarn;
+  }
+  assert.ok(warnings.some((m) => /could not fully enumerate/.test(m)));
+});
+
 test("fetchAll reports a failed carrier instead of losing the whole poll", async () => {
   const fetchImpl = async (url, init) => {
     if (url.includes("eshop.vodafone")) {
@@ -370,4 +435,26 @@ test("fetchAll rejects only when every carrier fails", async () => {
     () => fetchAll({ fetchImpl, retries: 0, gradeMin: 17, gradeMax: 17 }),
     /every carrier failed/
   );
+});
+
+test("fetchAll survives a carrier returning ~100k records (no stack overflow)", async () => {
+  // Regression: `records.push(...carrierRecords)` passes each record as an argument and
+  // threw "Maximum call stack size exceeded" once WE crossed ~100k numbers.
+  const BIG = 100000;
+  const content = Array.from({ length: BIG }, (_, i) => ({
+    id: String(i), msisdn: "010" + String(i).padStart(8, "0"),
+    available: true, defaultPrice: { amount: 5 }, simType: "ESIM", tariffs: [],
+  }));
+  const fetchImpl = async (url, init) => {
+    if (url.includes("eshop.vodafone")) {
+      const page = Number(new URL(url).searchParams.get("page"));
+      return { ok: true, status: 200, json: async () => ({ content: page === 0 ? content : [], totalElements: BIG }) };
+    }
+    if (url.includes("numbers.te.eg")) {
+      return { ok: true, status: 200, json: async () => ({ header: { retCode: "0" }, body: { telnumlist: [] } }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ status: true, numbers: [] }) };
+  };
+  const { records } = await fetchAll({ fetchImpl, gradeMin: 17, gradeMax: 17 });
+  assert.equal(records.length, BIG);
 });

@@ -66,6 +66,14 @@ export const CHANGE_LIST_LIMIT = intEnv("CHANGE_LIST_LIMIT", 2000);
 export const HISTORY_KEEP_DAYS = intEnv("HISTORY_KEEP_DAYS", 30);
 
 /**
+ * Per-carrier sanity gate. If a carrier comes back with less than this fraction of what
+ * Postgres already holds for it, the fetch is treated as partial: its numbers are still
+ * refreshed, but none of its rows are retired. Real churn runs ~1-2% a poll, so 0.9
+ * leaves wide headroom while catching a throttled fetch that lost 20% of a catalog.
+ */
+export const CARRIER_SHRINK_TOLERANCE = Number(process.env.CARRIER_SHRINK_TOLERANCE || 0.9);
+
+/**
  * A NEW number must score >= this to raise an alert.
  *
  * The scale is 0-100 but the public catalogs do not reach the top of it: across all
@@ -228,6 +236,13 @@ export const WE_MAX_PAGES = intEnv("WE_MAX_PAGES", 800);
 export const WE_CONCURRENCY = intEnv("WE_CONCURRENCY", 4);
 /** Minimum gap between WE requests per worker, to stay under its throttle. */
 export const WE_MIN_REQUEST_MS = intEnv("WE_MIN_REQUEST_MS", 60);
+/**
+ * How many spurious short pages to ride out per branch before giving up on it. WE
+ * returns short/empty pages under load; believing them truncates the branch, so each
+ * one is re-checked (see fetchWe). Past this budget the branch is reported incomplete
+ * rather than quietly returning partial data.
+ */
+export const WE_MAX_HICCUPS = intEnv("WE_MAX_HICCUPS", 25);
 if (WE_GRADE_MIN > WE_GRADE_MAX) {
   throw new Error("WE_GRADE_MIN must be <= WE_GRADE_MAX");
 }

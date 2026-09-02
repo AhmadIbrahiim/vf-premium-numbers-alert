@@ -219,3 +219,50 @@ test("a new number at/above the threshold triggers the alert email", async () =>
     }
   }
 });
+
+test("a carrier that comes back suspiciously small refreshes but retires nothing", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vf-shrink-"));
+  const prev = {
+    d: process.env.DATA_DIR, t: process.env.GITHUB_TOKEN, r: process.env.GITHUB_REPOSITORY,
+    gmin: process.env.WE_GRADE_MIN, gmax: process.env.WE_GRADE_MAX, db: process.env.DATABASE_URL,
+    key: process.env.RESEND_API_KEY,
+  };
+  process.env.DATA_DIR = dir;
+  process.env.DATABASE_URL = "postgresql://u:p@fake.neon.tech/db";
+  delete process.env.GITHUB_TOKEN;
+  delete process.env.GITHUB_REPOSITORY;
+  delete process.env.RESEND_API_KEY;
+  process.env.WE_GRADE_MIN = "17";
+  process.env.WE_GRADE_MAX = "17";
+  const { run } = await import("../src/run.js?shrink-test=" + Date.now());
+
+  // Postgres already holds 10 WE numbers; this poll only manages to fetch 1.
+  const seed = {};
+  for (let i = 0; i < 10; i++) {
+    seed["015000000" + String(i).padStart(2, "0")] = {
+      carrier: "we", tier: "GRADE_017", sim_type: "", score: 5, tags: [], best_grade: 5,
+      first_seen: "2026-08-01", last_seen: "2026-08-01", available: true, run_seq: 1,
+    };
+  }
+  const fake = fakeDb(seed);
+
+  try {
+    await run({
+      fetchImpl: routedFetch({
+        vf: { content: [], totalElements: 0 },
+        etByPool: {},
+        weByGrade: { GRADE_017: [[1500000000]] }, // 1 of the 10
+      }),
+      dbFetch: fake.fetch,
+    });
+    const stillAvailable = [...fake.rows.values()].filter((r) => r.available).length;
+    assert.equal(stillAvailable, 10, "none of the 10 WE rows may be retired on a partial fetch");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+    for (const [k, v] of [["DATA_DIR", prev.d], ["GITHUB_TOKEN", prev.t], ["GITHUB_REPOSITORY", prev.r],
+                          ["WE_GRADE_MIN", prev.gmin], ["WE_GRADE_MAX", prev.gmax],
+                          ["DATABASE_URL", prev.db], ["RESEND_API_KEY", prev.key]]) {
+      v === undefined ? delete process.env[k] : (process.env[k] = v);
+    }
+  }
+});

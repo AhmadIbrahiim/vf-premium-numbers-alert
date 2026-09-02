@@ -16,7 +16,7 @@ import { sendPremiumEmail } from "./email.js";
 import {
   DATA_DIR, MODEL, GITHUB_TOKEN, REPO,
   CANDIDATE_COUNT, BEST_COUNT, ALERT_THRESHOLD,
-  PUBLISH_PER_CARRIER, BEST_EVER_LIMIT, HISTORY_KEEP_DAYS,
+  PUBLISH_PER_CARRIER, BEST_EVER_LIMIT, HISTORY_KEEP_DAYS, CARRIER_SHRINK_TOLERANCE,
   todayInTz, tierBonus,
 } from "./config.js";
 
@@ -112,9 +112,29 @@ export async function run({ fetchImpl, dbFetch } = {}) {
   }
   const available = rows.map((r) => r.msisdn);
 
-  // 3. diff against what Postgres last saw available, scoped to the carriers we
-  // actually fetched — otherwise a throttled carrier reads as a mass disappearance.
-  const priorAvailable = await db.readAvailable(dbOpts, { carriers: okCarriers });
+  // 3. Per-carrier sanity gate before anything is retired. A carrier that comes back
+  // far smaller than what Postgres holds was throttled or truncated mid-enumeration,
+  // not emptied — keep refreshing its numbers but do not let it retire any.
+  const priorCounts = (await db.readCounts(dbOpts)).by_carrier;
+  const fetchedCounts = {};
+  for (const r of rows) fetchedCounts[r.carrier] = (fetchedCounts[r.carrier] || 0) + 1;
+  const trustedCarriers = [];
+  for (const carrier of okCarriers) {
+    const prior = priorCounts[carrier] || 0;
+    const now = fetchedCounts[carrier] || 0;
+    if (prior > 0 && now < prior * CARRIER_SHRINK_TOLERANCE) {
+      await summary(
+        `⚠️ ${carrier} came back ${now} vs ${prior} held (below ` +
+        `${Math.round(CARRIER_SHRINK_TOLERANCE * 100)}%) — refreshing it but retiring nothing`
+      );
+      continue;
+    }
+    trustedCarriers.push(carrier);
+  }
+
+  // 4. diff against what Postgres last saw available, scoped to the trusted carriers —
+  // otherwise a partial fetch reads as a mass disappearance.
+  const priorAvailable = await db.readAvailable(dbOpts, { carriers: trustedCarriers });
   const priorHistory = Object.fromEntries(priorAvailable.map((m) => [m, { status: "available" }]));
   const diff = computeDiff({ current: available, history: priorHistory });
 
@@ -124,11 +144,11 @@ export async function run({ fetchImpl, dbFetch } = {}) {
     return { skipped: "suspicious" };
   }
 
-  // 4. persist every number the carriers listed, then flag the ones that vanished
+  // 5. persist every number the carriers listed, then flag the ones that vanished
   await db.upsertNumbers({ rows, today, runSeq }, dbOpts);
-  await db.markGone({ runSeq, carriers: okCarriers }, dbOpts);
+  await db.markGone({ runSeq, carriers: trustedCarriers }, dbOpts);
 
-  // 5. candidates -> LLM grade -> best thirty
+  // 6. candidates -> LLM grade -> best thirty
   // Candidates = top-N by deterministic score, plus the best NEW numbers (never skip a
   // fresh arrival). The LLM only runs when this candidate set changed since last
   // run; otherwise we reuse cached grades (saves ~99% of calls on idle runs).
@@ -159,7 +179,7 @@ export async function run({ fetchImpl, dbFetch } = {}) {
   const gradeMap = new Map(bestThirty.map((c) => [c.msisdn, c.grade]));
   await db.applyGrades({ grades: gradeMap }, dbOpts);
 
-  // 6. publish: Postgres does the ranking, we just write the JSON the dashboard reads
+  // 7. publish: Postgres does the ranking, we just write the JSON the dashboard reads
   const pruned = await db.pruneGone({ keepDays: HISTORY_KEEP_DAYS, today }, dbOpts);
   const [counts, publishRows, bestEver, searchIndex] = await Promise.all([
     db.readCounts(dbOpts),
@@ -176,7 +196,7 @@ export async function run({ fetchImpl, dbFetch } = {}) {
   const nextEvents = appendEvents(events, { today, generatedAt, diff: diffWithSet });
   await writeState(DATA_DIR, { latest, events: nextEvents, bestEver, searchIndex });
 
-  // 7. alerts: NEW numbers scoring at/above the threshold (suppressed on baseline).
+  // 8. alerts: NEW numbers scoring at/above the threshold (suppressed on baseline).
   // Drawn from the diff rather than best_thirty — a strong new arrival that the LLM
   // did not happen to rank in its top 30 is still worth an alert.
   // Read at call time so an env change takes effect without a fresh module import.
@@ -205,7 +225,7 @@ export async function run({ fetchImpl, dbFetch } = {}) {
     sendPremiumEmail(newPremium, { dashboardUrl, threshold: alertThreshold }),
   ]);
 
-  // 8. change detection for commit gating
+  // 9. change detection for commit gating
   const sig = signature(available, bestThirty, tierMap);
   let prevSig = "";
   try { prevSig = (await readFile(join(DATA_DIR, "signature.txt"), "utf8")).trim(); } catch {}
@@ -216,7 +236,8 @@ export async function run({ fetchImpl, dbFetch } = {}) {
   await summary(
     `✅ run ok | total=${totalElements} available=${available.length} published=${latest.published_count} ` +
     `new=${diff.newMsisdns.length} gone=${diff.disappearedMsisdns.length} pruned=${pruned} ` +
-    `carriers=${okCarriers.join("+")}${failed?.length ? `/failed:${failed.map((f) => f.carrier).join(",")}` : ""} ` +
+    `trusted=${trustedCarriers.join("+") || "none"}` +
+    `${failed?.length ? ` failed:${failed.map((f) => f.carrier).join(",")}` : ""} ` +
     `baseline=${diff.isBaseline} llm=${regraded ? "graded" : "cached"} ` +
     `alerts=${newPremium.length} (issue:${notifyResult} email:${emailResult}) changed=${changed}`
   );

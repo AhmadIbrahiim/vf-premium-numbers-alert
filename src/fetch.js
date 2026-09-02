@@ -28,6 +28,7 @@ import {
   WE_CONCURRENCY,
   WE_QUERY_CAP,
   WE_MIN_REQUEST_MS,
+  WE_MAX_HICCUPS,
   WE_PREFIX,
   WE_MAX_PREFIX_DIGITS,
   weGradeSlug,
@@ -351,6 +352,7 @@ export async function fetchWe(opts = {}) {
   const prefix = opts.prefix ?? WE_PREFIX;
   const maxPrefixDigits = opts.maxPrefixDigits ?? WE_MAX_PREFIX_DIGITS;
   const minRequestMs = opts.minRequestMs ?? WE_MIN_REQUEST_MS;
+  const maxHiccups = opts.maxHiccups ?? WE_MAX_HICCUPS;
 
   /** The digit mask for a telnum prefix, e.g. "150" -> "150???????". */
   function fitmodFor(pfx) {
@@ -378,8 +380,9 @@ export async function fetchWe(opts = {}) {
   let returned = 0;
   const cappedBranches = [];
 
-  function absorb(list, grade) {
-    returned += list.length;
+  /** `count: false` for a page we are re-reading, so `returned` is not double-counted. */
+  function absorb(list, grade, { count = true } = {}) {
+    if (count) returned += list.length;
     for (const item of list) {
       const msisdn = "0" + String(item?.telnum ?? "");
       if (!MSISDN_RE.test(msisdn)) continue;
@@ -400,18 +403,45 @@ export async function fetchWe(opts = {}) {
     return list.length > 0;
   }
 
-  /** Page one (grade, fitmod) to exhaustion, `concurrency` pages at a time. */
+  /**
+   * Page one (grade, fitmod) to exhaustion, `concurrency` pages at a time.
+   *
+   * A short page normally means end-of-data, but under load WE also returns short and
+   * empty pages spuriously — trusting them silently truncated a branch and made the
+   * same grade return 61k, then 56k, then 53k across consecutive runs. So a short page
+   * is only believed once confirmed: if a LATER page in the same batch has rows the
+   * short one was definitely a hiccup, and otherwise it is re-requested once before we
+   * accept it as the end.
+   *
+   * @returns {Promise<boolean>} true if the branch was genuinely exhausted
+   */
   async function enumerate(grade, fitmod) {
-    for (let page = 1; page <= maxPages; page += concurrency) {
+    let page = 1;
+    let hiccups = 0;
+    while (page <= maxPages) {
       const batch = [];
       for (let i = 0; i < concurrency && page + i <= maxPages; i++) batch.push(page + i);
       const lists = await Promise.all(batch.map((p) => fetchPage(grade, fitmod, p)));
-      let short = false;
-      for (const list of lists) {
-        absorb(list, grade);
-        if (list.length < pageSize) short = true;
+      for (const list of lists) absorb(list, grade);
+
+      const shortIdx = lists.findIndex((list) => list.length < pageSize);
+      if (shortIdx === -1) {
+        page += batch.length;
+        continue;
       }
-      if (short) return true;
+
+      // Rows after a short page prove the gap was the server's, not the data's.
+      if (lists.slice(shortIdx + 1).some((list) => list.length > 0)) {
+        if (++hiccups > maxHiccups) return false;
+        page = batch[shortIdx];
+        continue;
+      }
+
+      const confirm = await fetchPage(grade, fitmod, batch[shortIdx]);
+      absorb(confirm, grade, { count: false }); // a re-read of a page already counted
+      if (confirm.length < pageSize) return true; // short twice: really the end
+      if (++hiccups > maxHiccups) return false;
+      page = batch[shortIdx] + 1;
     }
     return false;
   }
@@ -469,7 +499,7 @@ export async function fetchAll(opts = {}) {
   ];
   const settled = await Promise.allSettled(sources.map(([, fn]) => fn(opts)));
 
-  const records = [];
+  const perCarrier = [];
   const ok = [];
   const failed = [];
   let totalElements = 0;
@@ -478,7 +508,9 @@ export async function fetchAll(opts = {}) {
     const carrier = sources[i][0];
     if (result.status === "fulfilled") {
       ok.push(carrier);
-      records.push(...result.value.records);
+      // Collected and flattened below: `push(...records)` passes every element as an
+      // argument, which blows the call stack once a carrier returns ~100k of them.
+      perCarrier.push(result.value.records);
       totalElements += result.value.totalElements;
       returned += result.value.returned;
     } else {
@@ -489,5 +521,5 @@ export async function fetchAll(opts = {}) {
   if (!ok.length) {
     throw new Error(`every carrier failed: ${failed.map((f) => `${f.carrier}: ${f.error}`).join(" | ")}`);
   }
-  return { records, totalElements, returned, ok, failed };
+  return { records: perCarrier.flat(), totalElements, returned, ok, failed };
 }

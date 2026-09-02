@@ -17,10 +17,17 @@ API, and each is worked around:
 |---|---|---|---|
 | Vodafone | a separate catalog path per line type | pages `red` **and** `flex`, without the `simFamilyType==OWNER` filter | 5.2k |
 | Etisalat | ~1000 numbers per response, whatever you ask for | `searchPattern` takes a fixed-width mask, so each pool is split into 100 disjoint buckets by its last two digits (`011******52`), each well under the cap | 96.3k |
-| WE | 51 numbers per page **and** 20,000 per query | `fitmod` is a digit mask, so a query that hits the cap is split by fixing one more leading digit (`150???????`), recursively | 96.4k |
+| WE | 51 numbers per page, 20,000 per query, **and short pages under load** | `fitmod` is a digit mask, so a query that hits the cap is split by fixing one more leading digit (`150???????`), recursively. A short page is re-checked before it is believed | ~101k |
 
 The caps are the whole story here: queried naively the same three APIs report only
 2.7k / 5.0k / 6.3k — under 8% of what they actually hold.
+
+Completeness is checked by cross-measuring, not assumed. Vodafone: `red` + `flex` are
+the only line types that exist and 3183 + 2019 is exactly what we store. Etisalat: pool
+135 counted 69,141 via suffix buckets (100 requests) and 69,142 via an exhaustive prefix
+tree-walk (~10,000) — two unrelated methods agreeing. WE: the same grade fetched twice
+must return the same set (it now differs by ~0.01%, real churn; before the short-page
+fix it swung 21.9%, which is how that bug was caught).
 
 ## How it works
 
@@ -112,6 +119,9 @@ Set as workflow `env:` or repo variables (all optional):
 | `WE_MAX_PREFIX_DIGITS` | `6` | Most leading digits fixed when splitting (6 ⇒ ≤10⁴ per query, provably under the cap) |
 | `WE_MAX_PAGES` | `800` | Safety bound on pages per query |
 | `WE_CONCURRENCY` | `4` | WE pages in parallel (kept low; 8 got our IP throttled) |
+| `WE_MIN_REQUEST_MS` | `60` | Minimum gap between WE requests per worker |
+| `WE_MAX_HICCUPS` | `25` | Spurious short pages to ride out per branch before reporting it incomplete |
+| `CARRIER_SHRINK_TOLERANCE` | `0.9` | A carrier returning less than this fraction of what the DB holds is treated as partial: refreshed, but nothing retired |
 
 ## Dashboard CSS
 
@@ -145,6 +155,9 @@ for Neon's SQL-over-HTTP endpoint.
   requests — WE alone needs ~3,500, since it yields 51 numbers per request — and a
   10-minute cadence throttled our IP twice during development. A poll takes ~4–5 min.
 - If WE starts timing out on connect, that is the throttle. Back off to hourly.
+- A carrier that fails or comes back short is **carried over**, not retired: its rows
+  keep their state and the poll still updates the others. Only an all-carrier failure
+  skips the run.
 - The numbers are already publicly listed on each carrier's shop; the dashboard just
   organizes that public data.
 - If a carrier rotates its gating tokens and fetches start failing, the run skips
