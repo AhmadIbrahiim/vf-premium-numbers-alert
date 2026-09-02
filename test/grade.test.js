@@ -50,6 +50,7 @@ test("happy path: grades/reasons come through, order preserved, foreign filtered
   });
 
   const result = await gradeCandidates(candidates, {
+    baseUrl: "https://api.example.test/v1",
     token: "t",
     fetchImpl: fakeOkFetch(content),
   });
@@ -74,6 +75,7 @@ test("grades are clamped to 0-100 int", async () => {
     ],
   });
   const result = await gradeCandidates(candidates, {
+    baseUrl: "https://api.example.test/v1",
     token: "t",
     fetchImpl: fakeOkFetch(content),
   });
@@ -84,6 +86,7 @@ test("grades are clamped to 0-100 int", async () => {
 test("non-200 -> deterministic fallback, grade === score, length <= count", async () => {
   const candidates = makeCandidates(40);
   const result = await gradeCandidates(candidates, {
+    baseUrl: "https://api.example.test/v1",
     token: "t",
     count: 30,
     fetchImpl: async () => ({ ok: false, status: 503, json: async () => ({}) }),
@@ -96,6 +99,7 @@ test("non-200 -> deterministic fallback, grade === score, length <= count", asyn
 test("network throw -> fallback", async () => {
   const candidates = makeCandidates(5);
   const result = await gradeCandidates(candidates, {
+    baseUrl: "https://api.example.test/v1",
     token: "t",
     fetchImpl: async () => {
       throw new Error("network down");
@@ -108,6 +112,7 @@ test("network throw -> fallback", async () => {
 test("timeout/abort -> fallback", async () => {
   const candidates = makeCandidates(5);
   const result = await gradeCandidates(candidates, {
+    baseUrl: "https://api.example.test/v1",
     token: "t",
     fetchImpl: async () => {
       const e = new Error("aborted");
@@ -122,6 +127,7 @@ test("timeout/abort -> fallback", async () => {
 test("malformed JSON content -> fallback", async () => {
   const candidates = makeCandidates(5);
   const result = await gradeCandidates(candidates, {
+    baseUrl: "https://api.example.test/v1",
     token: "t",
     fetchImpl: fakeOkFetch("{not valid json"),
   });
@@ -132,6 +138,7 @@ test("malformed JSON content -> fallback", async () => {
 test("empty content -> fallback", async () => {
   const candidates = makeCandidates(3);
   const result = await gradeCandidates(candidates, {
+    baseUrl: "https://api.example.test/v1",
     token: "t",
     fetchImpl: async () => ({
       ok: true,
@@ -147,6 +154,7 @@ test("ranked present but no valid items -> fallback", async () => {
   const candidates = makeCandidates(4);
   const content = JSON.stringify({ ranked: [{ msisdn: "00000000000", grade: 50 }] });
   const result = await gradeCandidates(candidates, {
+    baseUrl: "https://api.example.test/v1",
     token: "t",
     fetchImpl: fakeOkFetch(content),
   });
@@ -185,6 +193,7 @@ test("count truncation respected on model output", async () => {
   // Note: candidates reuse msisdns mod 10; allowed set dedupes but ranked still
   // contains many entries — truncation to count must apply.
   const result = await gradeCandidates(candidates, {
+    baseUrl: "https://api.example.test/v1",
     token: "t",
     count: 7,
     fetchImpl: fakeOkFetch(JSON.stringify({ ranked })),
@@ -203,11 +212,13 @@ test("request shape: correct url, headers, and body", async () => {
     )();
   };
   await gradeCandidates(candidates, {
+    baseUrl: "https://api.example.test/v1",
     token: "abc",
     model: "openai/gpt-4o-mini",
     fetchImpl,
   });
-  assert.equal(captured.url, "https://models.github.ai/inference/chat/completions");
+  // The endpoint is derived from the configured base URL, not hardcoded to one vendor.
+  assert.equal(captured.url, "https://api.example.test/v1/chat/completions");
   assert.equal(captured.init.method, "POST");
   assert.equal(captured.init.headers.Authorization, "Bearer abc");
   assert.equal(captured.init.headers["Content-Type"], "application/json");
@@ -227,12 +238,13 @@ test("request shape: correct url, headers, and body", async () => {
 test("every fallback path names itself, so a silent downgrade is visible", async () => {
   const candidates = [{ msisdn: "01055455801", score: 42, tags: ["repeat"] }];
   const cases = [
-    ["no-token", {}],
-    ["http-503", { token: "t", fetchImpl: async () => ({ ok: false, status: 503 }) }],
-    ["empty-content", { token: "t", fetchImpl: fakeOkFetch(undefined) }],
-    ["bad-json", { token: "t", fetchImpl: fakeOkFetch("not json") }],
-    ["no-ranked-array", { token: "t", fetchImpl: fakeOkFetch(JSON.stringify({ nope: 1 })) }],
-    ["no-valid-items", { token: "t", fetchImpl: fakeOkFetch(JSON.stringify({ ranked: [{ msisdn: "09999999999" }] })) }],
+    ["no-provider", {}],
+    ["no-token", { baseUrl: "https://api.example.test/v1" }],
+    ["http-503", { baseUrl: "https://api.example.test/v1", token: "t", fetchImpl: async () => ({ ok: false, status: 503 }) }],
+    ["empty-content", { baseUrl: "https://api.example.test/v1", token: "t", fetchImpl: fakeOkFetch(undefined) }],
+    ["bad-json", { baseUrl: "https://api.example.test/v1", token: "t", fetchImpl: fakeOkFetch("not json") }],
+    ["no-ranked-array", { baseUrl: "https://api.example.test/v1", token: "t", fetchImpl: fakeOkFetch(JSON.stringify({ nope: 1 })) }],
+    ["no-valid-items", { baseUrl: "https://api.example.test/v1", token: "t", fetchImpl: fakeOkFetch(JSON.stringify({ ranked: [{ msisdn: "09999999999" }] })) }],
   ];
   const origWarn = console.warn;
   console.warn = () => {};
@@ -252,6 +264,7 @@ test("a real model ranking reports source 'model' and the model name", async () 
   const candidates = [{ msisdn: "01055455801", score: 42, tags: ["repeat"] }];
   const content = JSON.stringify({ ranked: [{ msisdn: "01055455801", grade: 91, reason: "five ones" }] });
   const r = await gradeCandidates(candidates, {
+    baseUrl: "https://api.example.test/v1",
     token: "t",
     model: "openai/gpt-4o-mini",
     fetchImpl: fakeOkFetch(content),
@@ -259,4 +272,15 @@ test("a real model ranking reports source 'model' and the model name", async () 
   assertSource(r, "model", "openai/gpt-4o-mini");
   // And the grade is the model's, not the heuristic score.
   assert.equal(rankedOf(r)[0].grade, 91);
+});
+
+test("a trailing slash on the base URL does not double up in the path", async () => {
+  const candidates = [{ msisdn: "01055455801", score: 80, tags: ["repeat"] }];
+  let url;
+  const fetchImpl = async (u) => {
+    url = u;
+    return fakeOkFetch(JSON.stringify({ ranked: [{ msisdn: "01055455801", grade: 80, reason: "r" }] }))();
+  };
+  await gradeCandidates(candidates, { baseUrl: "https://api.example.test/v1///", token: "t", fetchImpl });
+  assert.equal(url, "https://api.example.test/v1/chat/completions");
 });

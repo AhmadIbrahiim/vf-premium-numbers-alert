@@ -10,7 +10,7 @@ import * as db from "./db.js";
 import { notify } from "./notify.js";
 import { sendPremiumEmail } from "./email.js";
 import {
-  MODEL, GITHUB_TOKEN, REPO, DASHBOARD_URL,
+  MODEL, LLM_BASE_URL, LLM_API_KEY, GITHUB_TOKEN, REPO, DASHBOARD_URL,
   CANDIDATE_COUNT, BEST_COUNT, ALERT_THRESHOLD,
   HISTORY_KEEP_DAYS, CARRIER_SHRINK_TOLERANCE, PROVIDER_RUNS_KEEP, EVENTS_KEEP,
   todayInTz, tierBonus,
@@ -168,7 +168,9 @@ export async function run({ fetchImpl, dbFetch } = {}) {
     // Report what produced the cached ranking, not merely that it was cached.
     gradeSource = `cached:${prevGrades.source || "unknown"}`;
   } else {
-    const result = await gradeCandidates(candidates, { token: GITHUB_TOKEN, model: MODEL, count: BEST_COUNT });
+    const result = await gradeCandidates(candidates, {
+      baseUrl: LLM_BASE_URL, token: LLM_API_KEY, model: MODEL, count: BEST_COUNT,
+    });
     graded = result.ranked;
     gradeSource = result.source === "model" ? `model:${result.detail}` : `heuristic:${result.detail}`;
     await db.writeMeta("grades", { sig: candSig, graded, source: result.source, detail: result.detail }, dbOpts);

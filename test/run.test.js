@@ -139,12 +139,12 @@ test("REGRADE=1 forces re-evaluation even when the grade cache is valid", async 
   try {
     const r1 = await run({ fetchImpl, dbFetch: fake.fetch });
     // No token here, so grading must report the heuristic path — not merely "graded".
-    assert.equal(r1.gradeSource, "heuristic:no-token", "first run grades, and says how");
+    assert.equal(r1.gradeSource, "heuristic:no-provider", "first run grades, and says how");
     const r2 = await run({ fetchImpl, dbFetch: fake.fetch });
     assert.equal(r2.gradeSource, "cached:heuristic", "second run reuses the cache, and says what it cached");
     process.env.REGRADE = "1"; // read at call time inside run()
     const r3 = await run({ fetchImpl, dbFetch: fake.fetch });
-    assert.equal(r3.gradeSource, "heuristic:no-token", "REGRADE=1 bypasses the cache");
+    assert.equal(r3.gradeSource, "heuristic:no-provider", "REGRADE=1 bypasses the cache");
   } finally {
     await rm(dir, { recursive: true, force: true });
     prev.d === undefined ? delete process.env.DATA_DIR : (process.env.DATA_DIR = prev.d);

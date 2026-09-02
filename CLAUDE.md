@@ -133,10 +133,30 @@ gh-pages step. **Going to a server-rendered app first would have skipped both de
   `wrangler`, no `CLOUDFLARE_API_TOKEN`. Test writeability with a cheap write before
   building on it.
 
-## The LLM grading is off by default, and used to hide it
+## GitHub Models is dead — the LLM provider is now configuration
+
+**GitHub retired GitHub Models on 2026-07-30.** The endpoint answers HTTP 410
+`github_models_retirement_brownout`. It closed to new customers on 2026-06-16 and
+browned out on 16 and 23 July. No token can revive it: the free ride came from the
+`GITHUB_TOKEN` that GitHub Actions injected, and the service it authenticated is gone.
+
+So grading now takes any **OpenAI-compatible** chat-completions API:
+
+```
+LLM_BASE_URL=https://api.openai.com/v1        # or openrouter.ai/api/v1, Azure AI Foundry, …
+LLM_API_KEY=sk-…
+MODEL=gpt-4o-mini
+```
+
+`LLM_API_KEY` is deliberately separate from `GITHUB_TOKEN` — conflating them is what tied
+grading to GitHub in the first place. `GITHUB_TOKEN` is now only for the Issue-alert
+channel. With `LLM_BASE_URL` empty, grading reports `heuristic:no-provider` and the
+deterministic scorer runs, which is the designed behaviour.
+
+## How grading works, and how it used to hide its own failure
 
 `gradeCandidates` takes the top `CANDIDATE_COUNT` (150) numbers by heuristic score, asks
-GitHub Models (`openai/gpt-4o-mini`) to rank the best `BEST_COUNT` (30) with reasons,
+the configured model to rank the best `BEST_COUNT` (30) with reasons,
 discards any msisdn it did not send (anti-hallucination), clamps grades to 0-100, and
 caches the result in `meta.grades` keyed by a signature of the candidate set — so the
 model is called only when the top 150 actually changes.
@@ -146,9 +166,9 @@ That is correct behaviour, but the run summary used to print `llm=graded` for bo
 "graded" only meant *gradeCandidates was called*. The pipeline therefore reported
 success while running entirely on heuristics, and the logs gave no hint.
 
-It now reports `grading=model:<name>`, `grading=heuristic:<why>` (`no-token`,
-`http-503`, `bad-json`, …) or `grading=cached:<source>`. **If you see
-`heuristic:no-token`, the LLM is not running.** Two tells in the data:
+It now reports `grading=model:<name>`, `grading=heuristic:<why>` (`no-provider`,
+`no-token`, `http-503`, `bad-json`, …) or `grading=cached:<source>`. **Anything starting
+`heuristic:` means the LLM is not running.** Two tells in the data:
 
 - `best_grade` exactly equals `score` for every row
 - `reason` is a comma-joined tag list (`"pair-ladder, etisalat-golden"`) rather than prose
@@ -225,10 +245,8 @@ schedule first.
 
 Both are recoverable, and neither breaks a poll:
 
-- **LLM grading.** `src/grade.js` calls GitHub Models, which Actions authenticated for
-  free with its built-in `GITHUB_TOKEN`. On GitLab there is no such token, so grading
-  falls back to the deterministic scorer (the designed fallback, not a failure). To
-  restore it, add a GitHub PAT with `models: read` as the `GITHUB_TOKEN` CI/CD variable.
+- **LLM grading.** Moot: GitHub Models was retired entirely (see above). Set
+  `LLM_BASE_URL` and `LLM_API_KEY` to any OpenAI-compatible provider to restore it.
 - **GitHub Issue alerts.** `src/notify.js` needs a token and `GITHUB_REPOSITORY`; off
   GitHub it returns `skipped-no-credentials` and does nothing. Email alerts via Resend
   are unaffected and remain the real alerting channel.

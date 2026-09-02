@@ -1,4 +1,10 @@
-const ENDPOINT = "https://models.github.ai/inference/chat/completions";
+/**
+ * Any OpenAI-compatible chat-completions API. The provider is configuration, not a
+ * constant: this was hardcoded to GitHub Models, which GitHub retired on 2026-07-30.
+ */
+function endpointFor(baseUrl) {
+  return baseUrl.replace(/\/+$/, "") + "/chat/completions";
+}
 
 /**
  * Build the deterministic fallback ranking from the input candidates.
@@ -45,7 +51,8 @@ function clampGrade(value) {
 export async function gradeCandidates(candidates, opts = {}) {
   const {
     token,
-    model = "openai/gpt-4o-mini",
+    baseUrl,
+    model = "gpt-4o-mini",
     count = 30,
     fetchImpl,
     timeoutMs = 20000,
@@ -53,9 +60,13 @@ export async function gradeCandidates(candidates, opts = {}) {
 
   const list = Array.isArray(candidates) ? candidates.filter((c) => c && c.msisdn) : [];
 
-  // No token -> deterministic fallback without touching the network.
+  // Either missing -> deterministic fallback without touching the network.
+  if (!baseUrl) {
+    console.warn("gradeCandidates fallback: no LLM_BASE_URL configured");
+    return fallback(list, count, "no-provider");
+  }
   if (!token) {
-    console.warn("gradeCandidates fallback: no token provided");
+    console.warn("gradeCandidates fallback: no API key provided");
     return fallback(list, count, "no-token");
   }
 
@@ -117,7 +128,7 @@ export async function gradeCandidates(candidates, opts = {}) {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetchFn(ENDPOINT, {
+    const res = await fetchFn(endpointFor(baseUrl), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

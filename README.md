@@ -47,9 +47,10 @@ which:
 4. **diff** — `src/diff.js` compares the fetched set against what Postgres last had
    available: NEW, DISAPPEARED, first-seen age. Guards against bad fetches (silent
    first-run baseline, skips when the count drops >50%).
-5. **grade** — `src/grade.js` sends the top ~80 candidates to **GitHub Models**
-   (free, authed by the built-in `GITHUB_TOKEN`) for a best-30 ranking with reasons.
-   On any failure it falls back to the deterministic ranking.
+5. **grade** — `src/grade.js` sends the top candidates to any OpenAI-compatible API
+   (`LLM_BASE_URL` + `LLM_API_KEY`) for a best-30 ranking with reasons. Unconfigured or
+   failing, it falls back to the deterministic ranking and says so in the run summary.
+   *(This used to use GitHub Models, which GitHub retired on 2026-07-30.)*
 6. **record** — writes the NEW/GONE events and the per-carrier poll telemetry, then
    deletes rows gone longer than `HISTORY_KEEP_DAYS`.
 7. **alert** — when a NEW number scores ≥ `ALERT_THRESHOLD` it opens/comments a GitHub
@@ -116,8 +117,9 @@ a carrier is failing right now.
    `DASHBOARD_URL` so the emails link somewhere. Without a verified domain Resend only
    delivers to the Resend account owner's own address; to reach any other inbox verify a
    domain at resend.com/domains and set `ALERT_EMAIL_FROM`.
-4. *(optional)* For LLM grading add a GitHub PAT with `models: read` as `GITHUB_TOKEN`.
-   Without it the deterministic scorer is used, which is a designed fallback.
+4. *(optional)* For LLM grading add `LLM_BASE_URL` and `LLM_API_KEY` for any
+   OpenAI-compatible provider. Without them the deterministic scorer is used, which is a
+   designed fallback — the run summary reports `grading=heuristic:no-provider`.
 5. **Create the schedule:** *Settings → CI/CD → Schedules → New schedule*, cron
    `7,37 * * * *`, target branch `main`. `.gitlab-ci.yml` defines the job but not when
    it runs — without a schedule the poller never fires.
@@ -136,7 +138,9 @@ Set as GitLab CI/CD variables or in `.gitlab-ci.yml` (all optional):
 
 | Var | Default | Purpose |
 |---|---|---|
-| `MODEL` | `openai/gpt-4o-mini` | GitHub Models model (keep a low tier for daily caps) |
+| `LLM_BASE_URL` | — | OpenAI-compatible API root; empty disables LLM grading |
+| `LLM_API_KEY` | — | Key for `LLM_BASE_URL` |
+| `MODEL` | `gpt-4o-mini` | Model id, in the provider's own naming |
 | `ALERT_THRESHOLD` | `50` | Min score for a NEW number to raise an alert. **Not 90:** the public catalogs top out at 59 across all ~206k numbers (~215 clear 50, ~20 clear 60), so 90 could never fire |
 | `RESEND_API_KEY` | — | Resend key; unset disables email alerts |
 | `ALERT_EMAIL_TO` | — | Alert recipient; unset disables email alerts |

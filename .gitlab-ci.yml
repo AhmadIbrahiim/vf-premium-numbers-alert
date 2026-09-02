@@ -40,6 +40,11 @@ poll:
   variables:
     # Kept low deliberately: 8-way WE concurrency got this IP throttled twice.
     WE_CONCURRENCY: "4"
+  # Optional CI/CD variables, all masked:
+  #   RESEND_API_KEY, ALERT_EMAIL_TO, DASHBOARD_URL  — email alerts
+  #   LLM_BASE_URL, LLM_API_KEY, MODEL              — LLM grading (any
+  #     OpenAI-compatible API; GitHub Models was retired 2026-07-30)
+  #   GITHUB_TOKEN                                   — GitHub Issue alerts only
   script:
     - |
       if [ -z "$DATABASE_URL" ]; then

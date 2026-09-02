@@ -38,8 +38,27 @@ export const REFERER = "https://eshop.vodafone.com.eg/en/lines/red/numbers";
 // here — src/db.js reads it from the environment at call time so it is never
 // captured at import, and so it stays in exactly one place.
 
-/** GitHub Models. */
-export const MODEL = process.env.MODEL || "openai/gpt-4o-mini";
+/**
+ * LLM grading, via any OpenAI-compatible chat-completions API.
+ *
+ * This used to be hardcoded to GitHub Models, authenticated for free by the token
+ * GitHub Actions injects. GitHub retired that service on 2026-07-30 — the endpoint now
+ * answers HTTP 410 `github_models_retirement_brownout` — so the provider is a setting,
+ * not a constant, and grading is simply off until one is configured.
+ *
+ * `LLM_BASE_URL` is the API root, e.g.
+ *   https://api.openai.com/v1
+ *   https://openrouter.ai/api/v1
+ *   https://<resource>.services.ai.azure.com/openai/v1   (Azure AI Foundry)
+ * Empty disables grading and the deterministic scorer is used, which is the designed
+ * fallback rather than a failure.
+ */
+export const LLM_BASE_URL = (process.env.LLM_BASE_URL || "").replace(/\/+$/, "");
+/** API key for LLM_BASE_URL. Deliberately separate from GITHUB_TOKEN, which the
+ *  Issue-alert channel uses — conflating them is what tied grading to GitHub. */
+export const LLM_API_KEY = process.env.LLM_API_KEY || "";
+/** Model id, in whatever form the configured provider expects. */
+export const MODEL = process.env.MODEL || "gpt-4o-mini";
 export const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "";
 
 /** How many candidates we hand the LLM, and how many we surface. */
