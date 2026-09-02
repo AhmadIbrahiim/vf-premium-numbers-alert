@@ -1,29 +1,36 @@
 /**
  * app.js — VF Premium Numbers Dashboard (Tailwind, light/dark, podium)
  *
- * Fetches ./latest.json, ./best-ever.json and ./events.jsonl.json (same-origin,
- * no-store), then renders a ranked, filterable, sortable view. Top 3 show as a
- * podium; the rest as a list. Two views: "best available now" and "best ever seen".
+ * Reads Postgres live through Neon's Data API (see web/db.js and web/config.js) rather
+ * than published JSON snapshots: filtering, sorting and paging all happen in the
+ * database, so a search covers the whole ~206k catalogue instead of a pre-computed
+ * slice, and nothing on the page can be stale.
+ *
+ * Top 3 show as a podium; the rest as a list. Views: "best available now", "best ever
+ * seen", and the recent change timeline.
  * XSS-safe: all dynamic text goes through textContent; innerHTML only for static SVG.
  */
 
+import { fetchNumbers, fetchCounts, fetchEvents, isConfigured, NotConfiguredError } from "./db.js";
+
 const state = {
-  latest: null,
-  bestEver: null,
-  searchIndex: null, // every available number, fixed-width "<msisdn><carrier><score>"
-  events: null, // accumulated change events from events.jsonl.json
-  view: "now", // "now" | "ever" | "changes"
+  rows: [],          // the page of numbers currently rendered
+  total: null,       // matching rows in the database, for the count line
+  counts: null,      // available-per-carrier headline
+  events: null,      // recent NEW/GONE events
+  view: "now",       // "now" | "ever" | "changes"
   filter: "",
   sort: "grade",
-  carrier: "all", // "all" | "vodafone" | "etisalat" | "we"
-  error: false,
-  renderLimit: 300,
+  carrier: "all",    // "all" | "vodafone" | "etisalat" | "we"
+  error: null,
+  loading: false,
+  notConfigured: false,
+  shown: 0,          // how many rows have been fetched so far
 };
 
-const INITIAL_RENDER_LIMIT = 300;
-const RENDER_STEP = 300;
-/** Cap on index-only search hits, so a 1-digit query can't render the whole catalog. */
-const SEARCH_MATCH_LIMIT = 2000;
+const PAGE_SIZE = 300;
+/** Debounce for the search box, so typing does not fire a query per keystroke. */
+const SEARCH_DEBOUNCE_MS = 250;
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -181,205 +188,149 @@ function tagPills(row, max) {
 
 /* ----------------------------- data ----------------------------- */
 
-async function load() {
-  try {
-    // best-ever.json / latest.json are slices Postgres ranked for us; the full table
-    // is one row per number ever seen and far too large to fetch here.
-    const [l, be, ev] = await Promise.all([
-      fetch("./latest.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
-      fetch("./best-ever.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : [])),
-      fetch("./events.jsonl.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : [])),
-    ]);
-    state.latest = l;
-    state.bestEver = Array.isArray(be) ? be : [];
-    state.events = Array.isArray(ev) ? ev : [];
-    state.error = false;
-  } catch {
-    state.error = true;
-  }
-  renderHeader();
-  render();
+/** Map a database row onto the shape the renderers expect. */
+function toRow(r) {
+  const score = Number(r.score) || 0;
+  const bestGrade = Number(r.best_grade) || 0;
+  return {
+    msisdn: normalizedMsisdn(r.msisdn),
+    // "Best ever" ranks by the highest grade ever recorded; "now" by today's score.
+    grade: state.view === "ever" ? bestGrade : Math.max(score, 0),
+    score,
+    best_grade: bestGrade,
+    reason: "",
+    tags: Array.isArray(r.tags) ? r.tags.filter(Boolean) : [],
+    sim_type: r.sim_type || "",
+    carrier: r.carrier || "",
+    tier: r.tier || "",
+    is_new: Boolean(r.is_new),
+    first_seen: r.first_seen || "",
+    age_days: Number(r.age_days) || 0,
+    status: r.available === false ? "gone" : "available",
+  };
 }
 
-const CARRIER_BY_INITIAL = { v: "vodafone", e: "etisalat", w: "we" };
+/** Digits the user is searching for, if any. */
+function searchDigits() {
+  return state.filter.replace(/\D/g, "");
+}
 
 /**
- * Fetch the full-catalog search index once, on the first digit search. It covers every
- * available number (~160k), which latest.json deliberately does not — that carries the
- * top-ranked rows for browsing. Loaded lazily so the initial paint stays fast.
+ * Load a page of numbers from the database, replacing or extending the list.
+ * @param {object} [opts] - { append: true } to fetch the next page
  */
-async function ensureSearchIndex() {
-  if (state.searchIndex) return state.searchIndex;
-  try {
-    const r = await fetch("./index.json", { cache: "no-store" });
-    state.searchIndex = r.ok ? await r.json() : [];
-  } catch {
-    state.searchIndex = [];
+async function loadNumbers({ append = false } = {}) {
+  state.loading = true;
+  if (!append) {
+    state.rows = [];
+    state.shown = 0;
+    state.total = null;
   }
-  if (!Array.isArray(state.searchIndex)) state.searchIndex = [];
-  return state.searchIndex;
+  render();
+  try {
+    const { rows, total } = await fetchNumbers({
+      view: state.view,
+      carrier: state.carrier,
+      digits: searchDigits(),
+      sort: state.sort === "grade" && state.view === "now" ? "score" : state.sort,
+      limit: PAGE_SIZE,
+      offset: state.shown,
+    });
+    const mapped = rows.map(toRow).filter((r) => r.msisdn);
+    state.rows = append ? [...state.rows, ...mapped] : mapped;
+    state.shown = state.rows.length;
+    if (total !== null) state.total = total;
+    state.error = null;
+    state.notConfigured = false;
+  } catch (err) {
+    if (err instanceof NotConfiguredError) state.notConfigured = true;
+    else state.error = err.message || String(err);
+  } finally {
+    state.loading = false;
+    renderHeader();
+    render();
+  }
 }
 
-/** Decode one fixed-width index record into a renderable row. */
-function indexRow(rec) {
-  const msisdn = rec.slice(0, 11);
-  const score = Number(rec.slice(12, 15)) || 0;
+/** Headline per-carrier counts, shown in the header. */
+async function loadCounts() {
+  try {
+    state.counts = await fetchCounts();
+  } catch (err) {
+    if (err instanceof NotConfiguredError) state.notConfigured = true;
+  }
+  renderHeader();
+}
+
+/** The change timeline, straight from number_events. */
+async function loadEvents() {
+  try {
+    state.events = await fetchEvents(300);
+  } catch (err) {
+    if (err instanceof NotConfiguredError) state.notConfigured = true;
+    state.events = state.events || [];
+  }
+  if (state.view === "changes") render();
+}
+
+function currentRows() {
+  return state.rows;
+}
+
+/** Build a renderable row from a number_events entry. */
+function eventRow(e) {
+  const score = Number(e.score) || 0;
   return {
-    msisdn,
+    msisdn: normalizedMsisdn(e.msisdn),
     grade: score,
     score,
-    reason: "",
+    reason: e.type === "new" ? "newly added" : "no longer available",
     tags: [],
     sim_type: "",
-    carrier: CARRIER_BY_INITIAL[rec[11]] || "",
+    carrier: e.carrier || "",
     tier: "",
-    is_new: false,
-    first_seen: "",
+    is_new: e.type === "new",
+    status: e.type === "gone" ? "gone" : "available",
+    first_seen: e.day || "",
     age_days: 0,
   };
 }
 
 /**
- * Digit search across the whole catalog: the ranked rows we already have, plus any
- * index-only matches (numbers outside the published ranking). Capped so a short query
- * can't try to render 100k rows.
- */
-function searchMatches(digits, ranked) {
-  const have = new Set(ranked.map((r) => r.msisdn));
-  const out = [];
-  for (const rec of state.searchIndex || []) {
-    if (out.length >= SEARCH_MATCH_LIMIT) break;
-    if (!rec.includes(digits)) continue;
-    const msisdn = rec.slice(0, 11);
-    if (!msisdn.includes(digits) || have.has(msisdn)) continue;
-    out.push(indexRow(rec));
-  }
-  return out;
-}
-
-function bestEver() {
-  return (state.bestEver || [])
-    .map((e) => ({
-      msisdn: e.msisdn,
-      grade: e.best_grade ?? e.score ?? 0,
-      score: e.score ?? 0,
-      reason: e.status === "gone" ? "no longer available" : "currently available",
-      tags: e.tags || [],
-      sim_type: e.sim_type || "",
-      carrier: e.carrier || "",
-      tier: e.tier || "",
-      is_new: false,
-      first_seen: e.first_seen || "",
-      age_days: 0,
-      status: e.status || "available",
-    }))
-    .sort((a, b) => b.grade - a.grade);
-}
-
-/** Merge LLM-graded best_thirty with the remaining available numbers (heuristic score only). */
-function nowRows() {
-  const best = (state.latest?.best_thirty || []).slice();
-  const all = state.latest?.all_available;
-  if (!all || !all.length) return best;
-  const gradedSet = new Set(best.map((x) => x.msisdn));
-  const rest = all
-    .filter((a) => !gradedSet.has(a.msisdn))
-    .map((a) => ({ ...a, grade: a.score, reason: "" }));
-  return [...best, ...rest];
-}
-
-function currentRows() {
-  if (state.view === "changes") return [];
-  let rows = state.view === "now" ? nowRows() : bestEver();
-  rows = rows
-    .map((r) => ({ ...r, msisdn: normalizedMsisdn(r?.msisdn) }))
-    .filter((r) => r.msisdn);
-  if (state.carrier !== "all") rows = rows.filter((r) => carrierOf(r) === state.carrier);
-  const f = state.filter.replace(/\D/g, "");
-  if (f) {
-    rows = rows.filter((r) => r.msisdn.replace(/\D/g, "").includes(f));
-    // Extend a search past the published ranking into the full catalog index.
-    if (state.view === "now" && state.searchIndex) {
-      let extra = searchMatches(f, rows);
-      if (state.carrier !== "all") extra = extra.filter((r) => carrierOf(r) === state.carrier);
-      rows = [...rows, ...extra];
-    }
-  }
-  const by = state.sort;
-  rows.sort((a, b) => {
-    if (by === "new") return (b.is_new ? 1 : 0) - (a.is_new ? 1 : 0) || b.grade - a.grade;
-    if (by === "score") return (b.score || 0) - (a.score || 0);
-    return (b.grade || 0) - (a.grade || 0);
-  });
-  return rows;
-}
-
-/**
- * Build a change row from an msisdn + type (for the timeline view).
- * Falls back through best_thirty → history for grade/tags.
- */
-function bestEverIndex() {
-  if (!state._beIndex) state._beIndex = new Map((state.bestEver || []).map((e) => [e.msisdn, e]));
-  return state._beIndex;
-}
-
-function buildChangeRow(msisdn, type) {
-  const msisdnStr = normalizedMsisdn(msisdn);
-  const h = bestEverIndex().get(msisdnStr) || {};
-  const fromBest = (state.latest?.best_thirty || []).find((x) => x.msisdn === msisdnStr);
-  const grade = fromBest?.grade ?? h.best_grade ?? h.score ?? 0;
-  return {
-    msisdn: msisdnStr,
-    grade,
-    score: fromBest?.score ?? h.score ?? 0,
-    reason: fromBest?.reason || (type === "new" ? "newly added" : "no longer available"),
-    tags: fromBest?.tags || h.tags || [],
-    sim_type: fromBest?.sim_type || h.sim_type || "",
-    carrier: fromBest?.carrier || h.carrier || "",
-    tier: fromBest?.tier || h.tier || "",
-    is_new: type === "new",
-    status: type === "gone" ? "gone" : "available",
-    age_days: fromBest?.age_days ?? 0,
-  };
-}
-
-/**
- * Group accumulated events (from events.jsonl.json) by run timestamp.
- * Returns runs sorted most-recent-first, each with { ts, newMs[], goneMs[] }.
- * Returns null when the events file hasn't loaded yet / is empty.
+ * Group events by the poll that produced them, most recent first.
+ * Returns null while the events have not loaded.
  */
 function changesTimeline() {
-  const events = state.events;
-  if (!events || !events.length) return null;
+  if (!state.events) return null;
+  if (!state.events.length) return [];
   const runs = new Map();
-  for (const e of events) {
-    if (!runs.has(e.ts)) runs.set(e.ts, { ts: e.ts, newMs: [], goneMs: [] });
-    const r = runs.get(e.ts);
-    if (e.type === "new") r.newMs.push(e.msisdn);
-    else r.goneMs.push(e.msisdn);
+  for (const e of state.events) {
+    const ts = e.ts;
+    if (!runs.has(ts)) runs.set(ts, { ts, newRows: [], goneRows: [] });
+    const bucket = runs.get(ts);
+    (e.type === "new" ? bucket.newRows : bucket.goneRows).push(eventRow(e));
   }
-  return [...runs.values()].sort((a, b) => b.ts.localeCompare(a.ts));
-}
-
-function changesRows(type) {
-  const list = type === "new" ? (state.latest?.new_msisdns || []) : (state.latest?.disappeared_msisdns || []);
-  return list
-    .map((msisdn) => buildChangeRow(msisdn, type))
-    .filter((r) => r.msisdn)
-    .sort((a, b) => (b.grade || 0) - (a.grade || 0));
+  for (const r of runs.values()) {
+    r.newRows.sort((a, b) => b.score - a.score);
+    r.goneRows.sort((a, b) => b.score - a.score);
+  }
+  return [...runs.values()].sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
 }
 
 /* ----------------------------- render ----------------------------- */
 
 function renderHeader() {
-  if (state.error || !state.latest) {
-    $("updated").textContent = state.error ? "data unavailable" : "loading…";
-    return;
+  if (state.notConfigured) { $("updated").textContent = "not connected"; return; }
+  if (state.error) { $("updated").textContent = "data unavailable"; return; }
+  $("updated").textContent = state.loading && !state.counts ? "loading…" : "live from the database";
+  if (state.counts) {
+    $("stat-total").textContent = (state.counts.available_total ?? 0).toLocaleString();
+    const byCarrier = state.counts.by_carrier || {};
+    // The two smaller header stats now carry the per-carrier split, which is the thing
+    // worth seeing at a glance when three catalogues of very different sizes are merged.
+    $("stat-new").textContent = "VF " + (byCarrier.vodafone ?? 0).toLocaleString();
+    $("stat-gone").textContent = "ET " + (byCarrier.etisalat ?? 0).toLocaleString();
   }
-  $("updated").textContent = "updated " + relTime(state.latest.generated_at);
-  $("stat-total").textContent = (state.latest.total ?? 0).toLocaleString();
-  $("stat-new").textContent = "+" + (state.latest.new_count ?? 0);
-  $("stat-gone").textContent = "-" + (state.latest.disappeared_count ?? 0);
 }
 
 /** Full-width ranked row. */
@@ -469,21 +420,14 @@ function showEmpty(title, sub) {
 }
 
 function renderCount(total, filtered, rendered = total) {
-  const base = rendered < total
-    ? `${rendered}/${total} number${total === 1 ? "" : "s"}`
-    : `${total} number${total === 1 ? "" : "s"}`;
-  // Ranked browsing covers the top N per carrier; searching covers the whole catalog.
-  // Say which, so a number missing from the list reads as "not top-ranked" rather
-  // than "never collected".
-  const availTotal = state.latest?.available_total ?? 0;
-  const published = state.latest?.published_count ?? 0;
-  let note = "";
-  if (state.view === "now" && published && availTotal > published) {
-    note = filtered
-      ? ` · searching all ${availTotal.toLocaleString()}`
-      : ` · top ${published.toLocaleString()} of ${availTotal.toLocaleString()} — search to reach the rest`;
-  }
-  $("count").textContent = base + note + (filtered ? " · filtered" : "");
+  if (state.notConfigured) { $("count").textContent = ""; return; }
+  const dbTotal = state.total;
+  const base = dbTotal !== null && dbTotal > rendered
+    ? `${rendered.toLocaleString()} of ${dbTotal.toLocaleString()} number${dbTotal === 1 ? "" : "s"}`
+    : `${rendered.toLocaleString()} number${rendered === 1 ? "" : "s"}`;
+  // Every query runs against the whole table, so a search is never limited to a slice.
+  const scope = filtered ? " · searched the whole catalogue" : "";
+  $("count").textContent = base + scope + (state.loading ? " · loading…" : "");
 }
 
 function appendLoadMore(parent, remaining) {
@@ -492,12 +436,11 @@ function appendLoadMore(parent, remaining) {
   const btn = el(
     "button",
     "rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm transition hover:border-zinc-400 hover:bg-zinc-50 dark:border-white/10 dark:bg-ink-900/70 dark:text-zinc-300 dark:hover:border-white/20 dark:hover:bg-ink-850",
-    `Load ${Math.min(RENDER_STEP, remaining)} more`
+    state.loading ? "Loading…" : `Load ${Math.min(PAGE_SIZE, remaining).toLocaleString()} more`
   );
-  btn.addEventListener("click", () => {
-    state.renderLimit += RENDER_STEP;
-    render();
-  });
+  btn.disabled = state.loading;
+  // Each click fetches the next page from Postgres rather than revealing pre-loaded rows.
+  btn.addEventListener("click", () => loadNumbers({ append: true }));
   wrap.appendChild(btn);
   parent.appendChild(wrap);
 }
@@ -509,98 +452,50 @@ function renderChanges() {
   $("empty").classList.add("hidden");
   listEl.innerHTML = "";
 
-  const filterDigits = state.filter.replace(/\D/g, "");
+  const filterDigits = searchDigits();
   const applyFilter = (rows) => {
     let out = state.carrier === "all" ? rows : rows.filter((r) => carrierOf(r) === state.carrier);
-    if (filterDigits) out = out.filter((r) => r.msisdn.replace(/\D/g, "").includes(filterDigits));
+    if (filterDigits) out = out.filter((r) => r.msisdn.includes(filterDigits));
     return out;
   };
 
   const timeline = changesTimeline();
+  if (!timeline) { skeleton(); $("count").textContent = ""; return; }
 
-  // No events file yet — fall back to the current snapshot diff.
-  if (!timeline) {
-    const newRows = applyFilter(changesRows("new"));
-    const goneRows = applyFilter(changesRows("gone"));
-    const total = newRows.length + goneRows.length;
-    const renderedNew = newRows.slice(0, state.renderLimit);
-    const renderedGone = goneRows.slice(0, Math.max(0, state.renderLimit - renderedNew.length));
-    const renderedTotal = renderedNew.length + renderedGone.length;
-    renderCount(total, Boolean(filterDigits), renderedTotal);
-    if (!total) {
-      showEmpty("No changes in this snapshot", filterDigits ? "Try a different digit sequence." : "No newly added or gone numbers were detected.");
-      return;
-    }
-    const frag = document.createDocumentFragment();
-    const makeSection = (title, rows) => {
-      const wrap = el("section", "space-y-2");
-      wrap.appendChild(el("h2", "text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400", `${title} (${rows.length})`));
-      if (!rows.length) {
-        wrap.appendChild(el("p", "rounded-xl border border-dashed border-zinc-300 bg-white/60 px-4 py-3 text-sm text-zinc-500 dark:border-white/10 dark:bg-ink-900/50 dark:text-zinc-400", "None"));
-        return wrap;
-      }
-      rows.forEach((r, i) => wrap.appendChild(row(r, i)));
-      return wrap;
-    };
-    frag.appendChild(makeSection("Newly added", renderedNew));
-    frag.appendChild(makeSection("Gone", renderedGone));
-    listEl.appendChild(frag);
-    appendLoadMore(listEl, total - renderedTotal);
-    return;
-  }
-
-  // Timeline view: one section per run, most-recent first.
-  let totalRows = 0;
-  let renderedRows = 0;
-  let remainingBudget = state.renderLimit;
+  let total = 0;
+  let rendered = 0;
   const frag = document.createDocumentFragment();
 
   for (const run of timeline) {
-    const newRows = applyFilter(run.newMs.map((m) => buildChangeRow(m, "new")).sort((a, b) => b.grade - a.grade));
-    const goneRows = applyFilter(run.goneMs.map((m) => buildChangeRow(m, "gone")).sort((a, b) => b.grade - a.grade));
+    const newRows = applyFilter(run.newRows);
+    const goneRows = applyFilter(run.goneRows);
     if (!newRows.length && !goneRows.length) continue;
-    totalRows += newRows.length + goneRows.length;
-    const shownNew = newRows.slice(0, Math.max(0, remainingBudget));
-    remainingBudget -= shownNew.length;
-    const shownGone = goneRows.slice(0, Math.max(0, remainingBudget));
-    remainingBudget -= shownGone.length;
-    if (!shownNew.length && !shownGone.length) continue;
-    renderedRows += shownNew.length + shownGone.length;
+    total += newRows.length + goneRows.length;
+    rendered += newRows.length + goneRows.length;
 
     const runEl = el("div", "space-y-3 border-t border-zinc-100 pt-4 first:border-0 first:pt-0 dark:border-white/5");
-
-    // Run header with timestamp + count badges
     const header = el("div", "flex flex-wrap items-center gap-2");
     header.appendChild(el("span", "text-xs font-semibold text-zinc-400 dark:text-zinc-500", relTime(run.ts)));
-    if (shownNew.length) header.appendChild(el("span", "rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-300", `+${shownNew.length} new`));
-    if (shownGone.length) header.appendChild(el("span", "rounded-md bg-zinc-400/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500 ring-1 ring-zinc-400/30 dark:text-zinc-400", `-${shownGone.length} gone`));
+    if (newRows.length) header.appendChild(el("span", "rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-500/30 dark:text-emerald-300", `+${newRows.length} new`));
+    if (goneRows.length) header.appendChild(el("span", "rounded-md bg-zinc-400/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-500 ring-1 ring-zinc-400/30 dark:text-zinc-400", `-${goneRows.length} gone`));
     runEl.appendChild(header);
 
-    if (shownNew.length) {
-      const sec = el("section", "space-y-2");
-      sec.appendChild(el("h3", "text-xs font-medium uppercase tracking-wide text-emerald-600/70 dark:text-emerald-400/70", `Newly added (${shownNew.length})`));
-      shownNew.forEach((r, i) => sec.appendChild(row(r, i)));
-      runEl.appendChild(sec);
-    }
-    if (shownGone.length) {
-      const sec = el("section", "space-y-2");
-      sec.appendChild(el("h3", "text-xs font-medium uppercase tracking-wide text-zinc-400/70 dark:text-zinc-500/70", `Gone (${shownGone.length})`));
-      shownGone.forEach((r, i) => sec.appendChild(row(r, i)));
-      runEl.appendChild(sec);
-    }
-
+    [...newRows, ...goneRows].forEach((r, i) => runEl.appendChild(row(r, i)));
     frag.appendChild(runEl);
   }
 
-  if (!totalRows) {
-    showEmpty("No changes recorded", filterDigits ? "Try a different digit sequence." : "No newly added or gone numbers have been detected yet.");
+  if (!total) {
+    // Clear the count too, or the previous view's total lingers beside an empty list.
     $("count").textContent = "";
+    showEmpty(
+      "No recent changes",
+      filterDigits ? "Try a different digit sequence." : "Nothing has appeared or disappeared in the recorded window."
+    );
     return;
   }
 
-  renderCount(totalRows, Boolean(filterDigits), renderedRows);
   listEl.appendChild(frag);
-  appendLoadMore(listEl, totalRows - renderedRows);
+  renderCount(total, Boolean(filterDigits), rendered);
 }
 
 function render() {
@@ -608,42 +503,60 @@ function render() {
   const podiumEl = $("podium");
   $("empty").classList.add("hidden");
 
-  if (state.error) { showEmpty("Couldn't load data", "The dashboard data isn't published yet, or the network failed. It refreshes automatically."); $("count").textContent = ""; return; }
-  if (!state.latest) { podiumEl.classList.add("hidden"); skeleton(); return; }
+  if (state.notConfigured) {
+    podiumEl.classList.add("hidden");
+    showEmpty(
+      "Not connected to the database",
+      "Enable the Data API on the Neon project and set its URL in web/config.js."
+    );
+    $("count").textContent = "";
+    return;
+  }
+  if (state.error) {
+    podiumEl.classList.add("hidden");
+    showEmpty("Couldn't load data", state.error);
+    $("count").textContent = "";
+    return;
+  }
   if (state.view === "changes") { renderChanges(); return; }
 
   const rows = currentRows();
-  const filtered = Boolean(state.filter.replace(/\D/g, ""));
-  const visibleRows = rows.slice(0, state.renderLimit);
-  renderCount(rows.length, filtered, visibleRows.length);
+  const filtered = Boolean(searchDigits());
 
-  if (rows.length === 0) { showEmpty("No matches", filtered ? "Try a different digit sequence." : "Nothing to show yet."); return; }
+  if (state.loading && !rows.length) { podiumEl.classList.add("hidden"); skeleton(); $("count").textContent = "loading…"; return; }
 
-  // Podium for the top 3 when not filtering; the list holds the remainder.
-  const usePodium = !filtered && visibleRows.length >= 3;
+  renderCount(state.total ?? rows.length, filtered, rows.length);
+
+  if (!rows.length) {
+    podiumEl.classList.add("hidden");
+    showEmpty("No matches", filtered ? "Try a different digit sequence." : "Nothing to show yet.");
+    return;
+  }
+
+  // Podium for the top 3 when not searching; the list holds the remainder.
+  const usePodium = !filtered && rows.length >= 3;
   podiumEl.innerHTML = "";
   if (usePodium) {
     podiumEl.className = "mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end";
     const frag = document.createDocumentFragment();
-    visibleRows.slice(0, 3).forEach((r, i) => frag.appendChild(podiumCard(r, i)));
+    rows.slice(0, 3).forEach((r, i) => frag.appendChild(podiumCard(r, i)));
     podiumEl.appendChild(frag);
   } else {
     podiumEl.classList.add("hidden");
   }
 
-  const rest = usePodium ? visibleRows.slice(3) : visibleRows;
+  const rest = usePodium ? rows.slice(3) : rows;
   listEl.innerHTML = "";
   const frag = document.createDocumentFragment();
   rest.forEach((r, idx) => frag.appendChild(row(r, usePodium ? idx + 3 : idx)));
   listEl.appendChild(frag);
-  appendLoadMore(listEl, rows.length - visibleRows.length);
+  appendLoadMore(listEl, (state.total ?? rows.length) - rows.length);
 }
 
 /* ----------------------------- controls ----------------------------- */
 
 function setView(v) {
   state.view = v;
-  state.renderLimit = INITIAL_RENDER_LIMIT;
   const now = v === "now";
   const ever = v === "ever";
   const changes = v === "changes";
@@ -655,7 +568,12 @@ function setView(v) {
   $("tab-now").className = `rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${now ? on : off}`;
   $("tab-ever").className = `rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${ever ? on : off}`;
   $("tab-changes").className = `rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${changes ? on : off}`;
-  render();
+  if (changes) {
+    if (!state.events) loadEvents();
+    render();
+  } else {
+    loadNumbers();
+  }
 }
 
 function toggleTheme() {
@@ -668,20 +586,36 @@ function wire() {
   $("tab-now").addEventListener("click", () => setView("now"));
   $("tab-ever").addEventListener("click", () => setView("ever"));
   $("tab-changes").addEventListener("click", () => setView("changes"));
+
+  // Debounced: each keystroke would otherwise be a database query.
+  let searchTimer;
   $("filter").addEventListener("input", (e) => {
     state.filter = e.target.value;
-    state.renderLimit = INITIAL_RENDER_LIMIT;
-    render();
-    // First search pulls the full-catalog index, then re-renders with its hits folded in.
-    if (state.filter.replace(/\D/g, "") && !state.searchIndex) ensureSearchIndex().then(render);
+    clearTimeout(searchTimer);
+    if (state.view === "changes") { render(); return; }
+    searchTimer = setTimeout(() => loadNumbers(), SEARCH_DEBOUNCE_MS);
   });
-  $("sort").addEventListener("change", (e) => { state.sort = e.target.value; state.renderLimit = INITIAL_RENDER_LIMIT; render(); });
-  $("carrier").addEventListener("change", (e) => { state.carrier = e.target.value; state.renderLimit = INITIAL_RENDER_LIMIT; render(); });
+
+  $("sort").addEventListener("change", (e) => { state.sort = e.target.value; loadNumbers(); });
+  $("carrier").addEventListener("change", (e) => {
+    state.carrier = e.target.value;
+    if (state.view === "changes") render(); else loadNumbers();
+  });
   $("theme").addEventListener("click", toggleTheme);
-  setView("now");
+
+  if (!isConfigured()) {
+    state.notConfigured = true;
+    renderHeader();
+    render();
+    return;
+  }
+
   skeleton();
-  load();
-  setInterval(renderHeader, 30000);
+  setView("now");
+  loadCounts();
+  loadEvents();
+  // Re-read the headline periodically; the poller writes every 30 min.
+  setInterval(loadCounts, 120000);
 }
 
 wire();

@@ -23,7 +23,7 @@ function routedFetch({ vf, etByPool, weByGrade = {} }) {
   };
 }
 
-test("run merges all three carriers into latest.json + Postgres; WE gets no bonus", async () => {
+test("run merges all three carriers into Postgres; WE gets no bonus", async () => {
   const dir = await mkdtemp(join(tmpdir(), "vf-run-"));
   const prev = {
     d: process.env.DATA_DIR, t: process.env.GITHUB_TOKEN, r: process.env.GITHUB_REPOSITORY,
@@ -50,8 +50,9 @@ test("run merges all three carriers into latest.json + Postgres; WE gets no bonu
     const fake = fakeDb();
     await run({ fetchImpl, dbFetch: fake.fetch });
 
-    const latest = JSON.parse(await readFile(join(dir, "latest.json"), "utf8"));
-    const all = [...latest.best_thirty, ...latest.all_available];
+    // Nothing is published as JSON any more — the dashboard reads Postgres live, so the
+    // database rows ARE the output.
+    const all = [...fake.rows.values()].map((r) => ({ ...r, sim_type: r.sim_type }));
 
     const et = all.find((r) => r.msisdn === "01199999999");
     const vf = all.find((r) => r.msisdn === "01055455833");
@@ -62,26 +63,27 @@ test("run merges all three carriers into latest.json + Postgres; WE gets no bonu
     assert.ok(et.score >= 16, "etisalat platinum_plus bonus applied"); // +16 bonus
 
     assert.equal(vf.carrier, "vodafone");
+    assert.equal(vf.sim_type, "ESIM");
 
     assert.equal(we.carrier, "we");
     assert.equal(we.tier, "GRADE_017");
     // No bonus for WE: score equals the pure digit-pattern score.
     assert.equal(we.score, scoreMsisdn("01555027138").score);
 
-    // State lands in Postgres, not a JSON blob.
-    assert.equal(fake.rows.get("01555027138").carrier, "we");
-    assert.equal(fake.rows.get("01555027138").tier, "GRADE_017");
-    assert.equal(fake.rows.get("01555027138").available, true);
     assert.equal(fake.rows.size, 3);
+    assert.equal([...fake.rows.values()].every((r) => r.available), true);
 
-    // The full-catalog search index and the best-ever slice are published too.
-    const index = JSON.parse(await readFile(join(dir, "index.json"), "utf8"));
-    assert.equal(index.length, 3);
-    assert.ok(index.includes("01555027138w" + String(we.score).padStart(3, "0")));
-    const bestEver = JSON.parse(await readFile(join(dir, "best-ever.json"), "utf8"));
-    assert.equal(bestEver.length, 3);
-    assert.equal(latest.available_total, 3);
-    assert.deepEqual(latest.by_carrier, { etisalat: 1, vodafone: 1, we: 1 });
+    // Per-carrier telemetry landed for the provider status dashboard.
+    assert.deepEqual(fake.providerRuns.map((r) => r.carrier).sort(), ["etisalat", "vodafone", "we"]);
+    assert.equal(fake.providerRuns.every((r) => r.ok && r.trusted), true);
+    assert.ok(fake.providerRuns.every((r) => r.requests > 0), "requests were counted per carrier");
+
+    // The LLM grade cache lives in the meta table, not a file.
+    assert.ok(fake.meta.has("grades"));
+    assert.ok(fake.meta.has("signature"));
+    await assert.rejects(() => readFile(join(dir, "latest.json"), "utf8"), "no latest.json is written");
+    await assert.rejects(() => readFile(join(dir, "grades.json"), "utf8"), "no grades.json is written");
+
   } finally {
     await rm(dir, { recursive: true, force: true });
     prev.d === undefined ? delete process.env.DATA_DIR : (process.env.DATA_DIR = prev.d);

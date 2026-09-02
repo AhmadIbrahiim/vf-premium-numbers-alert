@@ -88,9 +88,151 @@ export async function migrate(opts = {}) {
     ["numbers_avail_score", "(available, score desc)"],
     ["numbers_carrier_score", "(carrier, available, score desc)"],
     ["numbers_best_grade", "(best_grade desc)"],
+    ["numbers_msisdn_trgm", "(msisdn text_pattern_ops)"],
   ]) {
     await sql(`create index if not exists ${name} on numbers ${cols}`, [], opts);
   }
+  // One row per carrier per poll — the provider status dashboard reads this.
+  await sql(
+    `create table if not exists provider_runs (
+       id          bigserial primary key,
+       run_at      timestamptz not null default now(),
+       carrier     text not null,
+       ok          boolean not null,
+       trusted     boolean not null,
+       records     integer not null default 0,
+       requests    integer not null default 0,
+       duration_ms integer not null default 0,
+       error       text
+     )`,
+    [],
+    opts
+  );
+  await sql(
+    "create index if not exists provider_runs_recent on provider_runs (carrier, run_at desc)",
+    [],
+    opts
+  );
+  // NEW / GONE events, for the dashboard's change timeline.
+  await sql(
+    `create table if not exists number_events (
+       id      bigserial primary key,
+       ts      timestamptz not null default now(),
+       day     date not null,
+       type    text not null,
+       msisdn  text not null,
+       carrier text not null default '',
+       score   integer not null default 0
+     )`,
+    [],
+    opts
+  );
+  await sql("create index if not exists number_events_ts on number_events (ts desc)", [], opts);
+  // Small key/value store for pipeline state that is not a number: the LLM grade cache
+  // and the change signature. Keeps the poller entirely free of state files.
+  await sql(
+    `create table if not exists meta (
+       key        text primary key,
+       value      jsonb not null,
+       updated_at timestamptz not null default now()
+     )`,
+    [],
+    opts
+  );
+}
+
+/** Read a JSON value from the `meta` store, or null. */
+export async function readMeta(key, opts = {}) {
+  const rows = await sql("select value from meta where key = $1", [key], opts);
+  return rows.length ? rows[0].value : null;
+}
+
+/** Write a JSON value to the `meta` store. */
+export async function writeMeta(key, value, opts = {}) {
+  await sql(
+    `insert into meta (key, value, updated_at) values ($1, $2::jsonb, now())
+     on conflict (key) do update set value = excluded.value, updated_at = now()`,
+    [key, JSON.stringify(value)],
+    opts
+  );
+}
+
+/**
+ * Append this run's NEW/GONE events, then trim to the most recent `keep`.
+ * @param {object} p - { newMsisdns, disappearedMsisdns, today, ts, scoreMap, carrierMap, keep }
+ */
+export async function recordNumberEvents({ newMsisdns = [], disappearedMsisdns = [], today, ts, scoreMap = new Map(), carrierMap = new Map(), keep = 2000 }, opts = {}) {
+  const entries = [
+    ...newMsisdns.map((m) => ["new", m]),
+    ...disappearedMsisdns.map((m) => ["gone", m]),
+  ];
+  if (entries.length) {
+    // Cap what one run can append, so a re-baseline cannot write 100k events.
+    const capped = entries.slice(0, keep);
+    await sql(
+      `insert into number_events (ts, day, type, msisdn, carrier, score)
+       select $1::timestamptz, $2::date, * from unnest($3::text[], $4::text[], $5::text[], $6::int[])`,
+      [
+        ts || new Date().toISOString(),
+        today,
+        capped.map(([type]) => type),
+        capped.map(([, m]) => m),
+        capped.map(([, m]) => carrierMap.get(m) || ""),
+        capped.map(([, m]) => scoreMap.get(m)?.score ?? 0),
+      ],
+      opts
+    );
+  }
+  await sql(
+    `delete from number_events where id in (
+       select id from (select id, row_number() over (order by ts desc, id desc) rn from number_events) t
+       where rn > $1
+     )`,
+    [keep],
+    opts
+  );
+}
+
+/**
+ * Record this poll's per-carrier outcome. `trusted` is false when the carrier failed or
+ * came back too small to be believed (so nothing of its was retired).
+ *
+ * @param {object} p - { stats: Array<{carrier,ok,records,requests,durationMs,error}>, trusted: string[] }
+ */
+export async function recordProviderRuns({ stats, trusted = [], runAt }, opts = {}) {
+  if (!stats?.length) return;
+  const trustedSet = new Set(trusted);
+  await sql(
+    `insert into provider_runs (run_at, carrier, ok, trusted, records, requests, duration_ms, error)
+     select $1::timestamptz, * from unnest(
+       $2::text[], $3::bool[], $4::bool[], $5::int[], $6::int[], $7::int[], $8::text[]
+     )`,
+    [
+      runAt || new Date().toISOString(),
+      stats.map((s) => s.carrier),
+      stats.map((s) => Boolean(s.ok)),
+      stats.map((s) => trustedSet.has(s.carrier)),
+      stats.map((s) => s.records ?? 0),
+      stats.map((s) => s.requests ?? 0),
+      stats.map((s) => s.durationMs ?? 0),
+      stats.map((s) => s.error ?? null),
+    ],
+    opts
+  );
+}
+
+/** Trim provider_runs to the most recent `keep` rows per carrier. */
+export async function pruneProviderRuns({ keep = 500 }, opts = {}) {
+  await sql(
+    `delete from provider_runs where id in (
+       select id from (
+         select id, row_number() over (partition by carrier order by run_at desc) rn
+         from provider_runs
+       ) t where rn > $1
+     )`,
+    [keep],
+    opts
+  );
 }
 
 /**
@@ -212,62 +354,52 @@ export async function pruneGone({ keepDays, today }, opts = {}) {
 }
 
 /**
- * The dashboard's "best available now" rows: the top `limit` available numbers per
- * carrier by score, so a small catalog isn't crowded out by a larger one. Ordering,
- * ranking and the per-carrier split all happen in Postgres.
+ * Provider status: for each carrier, its latest poll plus a rollup over the recent ones.
+ * This is what the status dashboard renders.
  */
-export async function readPublishRows({ perCarrier, today }, opts = {}) {
-  const rows = await sql(
-    `select msisdn, score, tags, sim_type, carrier, tier, best_grade,
-            to_char(first_seen, 'YYYY-MM-DD') as first_seen,
-            ($2::date - first_seen) as age_days,
-            first_seen = $2::date as is_new
-     from (
-       select *, row_number() over (partition by carrier order by score desc, msisdn) as rn
-       from numbers where available
-     ) ranked
-     where rn <= $1
-     order by score desc, msisdn`,
-    [perCarrier, today],
+export async function readProviderStatus({ window = 48 } = {}, opts = {}) {
+  return sql(
+    `with recent as (
+       select *, row_number() over (partition by carrier order by run_at desc) rn
+       from provider_runs
+     ),
+     windowed as (select * from recent where rn <= $1)
+     select
+       w.carrier,
+       max(w.run_at) filter (where w.rn = 1)               as last_run_at,
+       bool_or(w.ok)  filter (where w.rn = 1)              as last_ok,
+       bool_or(w.trusted) filter (where w.rn = 1)          as last_trusted,
+       max(w.records) filter (where w.rn = 1)              as last_records,
+       max(w.requests) filter (where w.rn = 1)             as last_requests,
+       max(w.duration_ms) filter (where w.rn = 1)          as last_duration_ms,
+       max(w.error) filter (where w.rn = 1)                as last_error,
+       max(w.run_at) filter (where w.ok)                   as last_success_at,
+       count(*)::int                                       as polls,
+       count(*) filter (where w.ok)::int                   as polls_ok,
+       round(avg(w.duration_ms))::int                      as avg_duration_ms,
+       round(avg(w.requests))::int                         as avg_requests,
+       (select count(*)::int from numbers n where n.available and n.carrier = w.carrier) as available_now
+     from windowed w
+     group by w.carrier
+     order by w.carrier`,
+    [window],
     opts
   );
-  return rows.map((r) => ({ ...r, tags: tagList(r.tags) }));
 }
 
-/**
- * The dashboard's "best ever seen" rows: the top `perCarrier` by best_grade for each
- * carrier, available or not. Per carrier rather than a global top-N — see
- * BEST_EVER_PER_CARRIER for what a global ranking did to Vodafone.
- */
-export async function readBestEverRows({ perCarrier, today }, opts = {}) {
-  const rows = await sql(
-    `select msisdn, score, tags, sim_type, carrier, tier, best_grade, available,
-            to_char(first_seen, 'YYYY-MM-DD') as first_seen,
-            ($2::date - first_seen) as age_days
+/** Recent per-carrier poll history, oldest-first, for the status page sparklines. */
+export async function readProviderHistory({ window = 48 } = {}, opts = {}) {
+  return sql(
+    `select carrier, run_at, ok, trusted, records, requests, duration_ms
      from (
-       select *, row_number() over (partition by carrier order by best_grade desc, score desc, msisdn) as rn
-       from numbers
-     ) ranked
+       select *, row_number() over (partition by carrier order by run_at desc) rn
+       from provider_runs
+     ) t
      where rn <= $1
-     order by best_grade desc, score desc, msisdn`,
-    [perCarrier, today],
+     order by run_at asc`,
+    [window],
     opts
   );
-  return rows.map((r) => ({ ...r, tags: tagList(r.tags) }));
-}
-
-/**
- * Every available msisdn with its carrier + score, for the dashboard's full-catalog
- * digit search. Returned as compact fixed-width strings ("msisdn|carrierChar|score")
- * so ~160k numbers cost ~2.5MB of JSON instead of ~25MB of objects.
- */
-export async function readSearchIndex(opts = {}) {
-  const rows = await sql(
-    `select msisdn, left(carrier, 1) as c, score from numbers where available order by msisdn`,
-    [],
-    opts
-  );
-  return rows.map((r) => `${r.msisdn}${r.c}${String(r.score).padStart(3, "0")}`);
 }
 
 /** Headline counts for the dashboard: total available, and the per-carrier split. */

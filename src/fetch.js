@@ -480,16 +480,19 @@ export async function fetchWe(opts = {}) {
 /**
  * Fetch all carriers (Vodafone + Etisalat + WE) and merge.
  *
- * Partial success is reported, not thrown: WE needs ~3,500 requests a poll and will
- * occasionally throttle us into connect timeouts. Losing every carrier's update because
- * one refused is worse than carrying that one over — state is per-row in Postgres, so
- * the caller updates the carriers in `ok` and leaves the others exactly as they were
- * (see how run.js scopes the diff and markGone). Rejects only if EVERY source fails,
- * which is the case where continuing really would corrupt the picture.
+ * Partial success is reported, not thrown: WE needs thousands of requests a poll and
+ * will occasionally throttle us into connect timeouts. Losing every carrier's update
+ * because one refused is worse than carrying that one over — state is per-row in
+ * Postgres, so the caller updates the carriers in `ok` and leaves the others exactly as
+ * they were. Rejects only if EVERY source fails.
+ *
+ * Each carrier is also timed and its requests counted, which is what feeds the provider
+ * status dashboard (`provider_runs`).
  *
  * @param {object} [opts] - forwarded to each fetcher (e.g. fetchImpl, retries, gradeMin/gradeMax)
  * @returns {Promise<{ records: Record[], totalElements: number, returned: number,
- *   ok: string[], failed: Array<{carrier:string, error:string}> }>}
+ *   ok: string[], failed: Array<{carrier:string, error:string}>,
+ *   stats: Array<{carrier:string, ok:boolean, records:number, requests:number, durationMs:number, error:string|null}> }>}
  */
 export async function fetchAll(opts = {}) {
   const sources = [
@@ -497,29 +500,60 @@ export async function fetchAll(opts = {}) {
     ["etisalat", fetchEtisalat],
     ["we", fetchWe],
   ];
-  const settled = await Promise.allSettled(sources.map(([, fn]) => fn(opts)));
+  const baseFetch = opts.fetchImpl || globalThis.fetch;
+
+  const settled = await Promise.allSettled(
+    sources.map(async ([carrier, fn]) => {
+      let requests = 0;
+      const startedAt = Date.now();
+      // Count this carrier's HTTP calls without each fetcher having to know about it.
+      const counting = (...args) => {
+        requests++;
+        return baseFetch(...args);
+      };
+      try {
+        const value = await fn({ ...opts, fetchImpl: counting });
+        return { carrier, value, requests, durationMs: Date.now() - startedAt };
+      } catch (err) {
+        // Preserve the telemetry for a failed carrier too — that is the interesting case.
+        throw Object.assign(new Error(err?.message || String(err)), {
+          carrier, requests, durationMs: Date.now() - startedAt,
+        });
+      }
+    })
+  );
 
   const perCarrier = [];
   const ok = [];
   const failed = [];
+  const stats = [];
   let totalElements = 0;
   let returned = 0;
+
   settled.forEach((result, i) => {
     const carrier = sources[i][0];
     if (result.status === "fulfilled") {
+      const { value, requests, durationMs } = result.value;
       ok.push(carrier);
       // Collected and flattened below: `push(...records)` passes every element as an
       // argument, which blows the call stack once a carrier returns ~100k of them.
-      perCarrier.push(result.value.records);
-      totalElements += result.value.totalElements;
-      returned += result.value.returned;
+      perCarrier.push(value.records);
+      totalElements += value.totalElements;
+      returned += value.returned;
+      stats.push({ carrier, ok: true, records: value.records.length, requests, durationMs, error: null });
     } else {
-      failed.push({ carrier, error: result.reason?.message || String(result.reason) });
+      const err = result.reason || {};
+      const message = err.message || String(result.reason);
+      failed.push({ carrier, error: message });
+      stats.push({
+        carrier, ok: false, records: 0,
+        requests: err.requests ?? 0, durationMs: err.durationMs ?? 0, error: message,
+      });
     }
   });
 
   if (!ok.length) {
     throw new Error(`every carrier failed: ${failed.map((f) => `${f.carrier}: ${f.error}`).join(" | ")}`);
   }
-  return { records: perCarrier.flat(), totalElements, returned, ok, failed };
+  return { records: perCarrier.flat(), totalElements, returned, ok, failed, stats };
 }

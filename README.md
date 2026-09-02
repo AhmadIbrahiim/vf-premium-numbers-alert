@@ -6,8 +6,9 @@ Monitors the public phone-number catalogs of all three Egyptian carriers —
 **Vodafone** (010), **Etisalat** (011) and **WE** (015) — on a schedule, scores every
 number for how **premium** its digit pattern is, surfaces the best 30 currently-available
 numbers (refined by an LLM), tracks new arrivals and how long each has been available,
-and shows it all on a static dashboard. State lives in **Neon Postgres**; the poller
-runs in GitHub Actions and publishes the dashboard to GitHub Pages — no servers.
+and shows it all on a dashboard that queries the database live. Everything is in **Neon
+Postgres**; the poller runs in GitHub Actions and the dashboard is a static page on
+GitHub Pages — no servers of our own.
 
 The carriers list **~206k** numbers between them, and every one of them silently caps
 how much it will hand over — in a different way. Each cap was verified against the live
@@ -35,8 +36,9 @@ A scheduled GitHub Actions workflow (`.github/workflows/poll.yml`, best-effort e
 ~10 min) runs `src/run.js`, which:
 
 1. **fetch** — pulls all three catalogs concurrently (static gating headers, no
-   cookie/token needed), retrying with backoff on 5xx. Any source failing hard skips
-   the whole run rather than overwriting good data with a partial set.
+   cookie/token needed), retrying with backoff on 5xx. A carrier that fails or comes
+   back suspiciously small is *carried over*: its rows keep their state and the other
+   carriers still update. Only an all-carrier failure skips the run.
 2. **score** — `src/score.js` rates every number 0–100 on digit-pattern heuristics
    (repeats, runs, palindromes, repeating blocks, round endings, low digit variety…).
 3. **store** — `src/db.js` upserts **every** number into Postgres (`first_seen` set
@@ -48,37 +50,56 @@ A scheduled GitHub Actions workflow (`.github/workflows/poll.yml`, best-effort e
 5. **grade** — `src/grade.js` sends the top ~80 candidates to **GitHub Models**
    (free, authed by the built-in `GITHUB_TOKEN`) for a best-30 ranking with reasons.
    On any failure it falls back to the deterministic ranking.
-6. **publish** — Postgres does the ranking; the run just writes what the dashboard
-   reads: `latest.json` (top `PUBLISH_PER_CARRIER` rich rows *per carrier*),
-   `best-ever.json` (top by `best_grade`) and `index.json` (every available number in
-   ~15 bytes each, for full-catalog search). Rows gone longer than
-   `HISTORY_KEEP_DAYS` are deleted.
+6. **record** — writes the NEW/GONE events and the per-carrier poll telemetry, then
+   deletes rows gone longer than `HISTORY_KEEP_DAYS`. Nothing is published: the
+   dashboard queries these tables itself.
 7. **alert** — when a NEW number scores ≥ `ALERT_THRESHOLD` it opens/comments a GitHub
    Issue and, if `RESEND_API_KEY` + `ALERT_EMAIL_TO` are set, emails the details. Both
    are best-effort: a failed alert is logged and never fails the poll or loses data.
-8. **commit** — pushes data + dashboard to the `gh-pages` branch **only when the
-   meaningful state changed** (no timestamp-only commits).
 
-### Why Postgres
+A scheduled poll touches nothing but the database. `gh-pages` is republished only when
+the dashboard's own files change.
 
-The state used to be a `history.json` blob, read and rewritten whole every run. At
-~206k numbers that would be 30MB+ committed every poll, which forced the poller to
-track only a slice — so `first_seen` was wrong for most numbers and the per-run diff
-was mostly sampling noise (~370 "new" and ~460 "gone" every run, against a real churn
-of ~30). Postgres tracks every number exactly, with no rewrite churn.
+### Why Postgres, and why no JSON
 
-### What the dashboard loads
+The state used to be a `history.json` blob, read and rewritten whole every run. At ~206k
+numbers that would be 30MB+ committed every poll, which is what forced the poller to
+track only a slice — so `first_seen` was wrong for most numbers and the per-run diff was
+mostly sampling noise (~370 "new" and ~460 "gone" every run, against a real churn of
+~30). And a published snapshot is stale the moment it is written.
 
-Served from `gh-pages`, same-origin:
+So there are no data files at all now. Numbers, the LLM grade cache, the run signature,
+the change log and the per-poll provider telemetry are all rows in Postgres, and the
+dashboard reads them live:
 
-| File | When | Size | What |
-|---|---|---|---|
-| `latest.json` | on load | ~3.2MB | ranked rows for browsing + the LLM's best 30 |
-| `index.json` | first search | ~3.5MB | **every** available number (`<msisdn><carrier initial><score>`) |
-| `best-ever.json` | "best ever" tab | ~3.9MB | top by `best_grade` per carrier, available or not |
-| `events.jsonl.json` | on load | ~45KB | recent change timeline |
+| Table | Holds |
+|---|---|
+| `numbers` | one row per number ever seen: score, tags, carrier, tier, `first_seen`, `best_grade`, availability |
+| `provider_runs` | one row per carrier per poll: ok/trusted, records, requests, duration, error |
+| `number_events` | recent NEW / GONE events, for the change timeline |
+| `meta` | pipeline internals (grade cache, signature). **Not** exposed to the dashboard |
 
-So browsing shows the top-ranked numbers, and searching digits reaches all ~206k.
+### How a static page reads Postgres
+
+Through Neon's **Data API** (PostgREST). `web/db.js` is the only place that talks to it,
+`web/config.js` holds the endpoint, and `db/grants.sql` restricts the anonymous role to
+`SELECT` on the three public tables with row-level security and a 5s statement timeout.
+A database credential never reaches the browser.
+
+Because filtering, sorting and paging happen in Postgres, a search covers the entire
+~206k catalogue rather than a pre-computed slice, and "Load more" is a real query.
+
+`worker/api.js` is an alternative: a Cloudflare Worker that keeps the connection string
+server-side and exposes only whitelisted queries. Use it instead of the Data API if you
+would rather not expose the tables directly — the dashboard needs `web/db.js` pointed at
+it, and it is the tighter option because the client cannot compose its own filters.
+
+### Provider status
+
+`status.html` is a live health view per carrier: state (live / carried over / failing),
+numbers collected, requests used, poll duration, success rate over the recent window, a
+sparkline of inventory, the last error, and a table of recent polls. It reads
+`provider_runs` directly and refreshes itself.
 
 ## One-time setup
 
@@ -86,12 +107,12 @@ So browsing shows the top-ranked numbers, and searching digits reaches all ~206k
 2. **Create a Neon project** and set its connection string as a repo secret:
    `gh secret set DATABASE_URL`. The pipeline refuses to run without it rather than
    silently losing history. The schema is created on the first run (`db.migrate()`).
-5. **Settings → Actions → General → Workflow permissions:** "Read and write
+6. **Settings → Actions → General → Workflow permissions:** "Read and write
    permissions" (lets the workflow push to `gh-pages` and open issues).
-6. Run the workflow once: **Actions → poll-vf-numbers → Run workflow**. This seeds the
+7. Run the workflow once: **Actions → poll-vf-numbers → Run workflow**. This seeds the
    baseline (no alerts on the first run) and creates the `gh-pages` branch.
-7. **Settings → Pages:** source = branch `gh-pages`, folder `/ (root)`.
-8. Visit `https://<you>.github.io/<repo>/`.
+8. **Settings → Pages:** source = branch `gh-pages`, folder `/ (root)`.
+9. Visit `https://<you>.github.io/<repo>/`.
 
 `GITHUB_TOKEN` is provided automatically. `DATABASE_URL` is the only required secret.
 
@@ -108,10 +129,9 @@ Set as workflow `env:` or repo variables (all optional):
 | `ALERT_EMAIL_FROM` | `onboarding@resend.dev` | Sender. Resend's shared sender only delivers to the Resend account owner — to email anyone else, verify a domain at resend.com/domains and set this to an address on it |
 | `CANDIDATE_COUNT` | `150` | How many top-scored numbers the LLM ranks |
 | `BEST_COUNT` | `30` | How many to surface |
-| `PUBLISH_PER_CARRIER` | `7000` | Rich ranked rows per carrier in `latest.json` — per carrier, so Etisalat's tier bonus can't crowd out Vodafone's whole 5.2k catalog |
-| `BEST_EVER_PER_CARRIER` | `7000` | Rows in `best-ever.json` **per carrier** — global ranking left only 374 of Vodafone's 5,202 numbers in that view |
-| `CHANGE_LIST_LIMIT` | `2000` | Cap on the new/disappeared lists in `latest.json` (the counts stay exact) |
 | `HISTORY_KEEP_DAYS` | `30` | Delete rows gone longer than this |
+| `PROVIDER_RUNS_KEEP` | `500` | Poll history kept per carrier for the status page |
+| `EVENTS_KEEP` | `2000` | NEW/GONE events kept for the change timeline |
 | `VF_TYPES` | `red,flex` | Vodafone line-type catalog paths to page |
 | `ETISALAT_SUFFIX_DIGITS` | `2` | Trailing digits fixed per bucket (2 → 100 buckets/pool) |
 | `ETISALAT_MAX_SUFFIX_DIGITS` | `6` | Most digits fixed when splitting a capped bucket |
@@ -141,9 +161,9 @@ node --test                        # all unit tests (zero dependencies, Node 20+
 
 # live dry run: no GITHUB_TOKEN -> deterministic grading instead of the LLM.
 # Point DATABASE_URL at a scratch Neon branch, not the one the workflow writes to.
-DATABASE_URL=postgres://... DATA_DIR=/tmp/vf node src/run.js
+DATABASE_URL=postgres://... node src/run.js
 
-cd web && python3 -m http.server   # preview dashboard (copy the generated JSON in)
+cd web && python3 -m http.server   # preview the dashboard against your Data API
 ```
 
 The test suite needs no database: `test/helpers/fake-db.js` is an in-memory stand-in

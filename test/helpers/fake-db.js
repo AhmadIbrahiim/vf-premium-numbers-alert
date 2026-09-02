@@ -4,8 +4,9 @@
  * src/db.js issues a small, fixed set of statements, so the stub matches on a
  * distinctive substring of each rather than parsing SQL. It keeps a Map of rows with
  * the same semantics as the real schema (first_seen set once, best_grade only climbs,
- * run_seq marking which rows this run touched), which is enough for the end-to-end
- * run tests to assert on real state transitions.
+ * run_seq marking which rows this run touched), plus the `meta`, `number_events` and
+ * `provider_runs` side tables, which is enough for the end-to-end run tests to assert
+ * on real state transitions.
  */
 
 /**
@@ -14,6 +15,9 @@
  */
 export function fakeDb(seed = {}) {
   const rows = new Map(Object.entries(seed).map(([msisdn, r]) => [msisdn, { msisdn, ...r }]));
+  const meta = new Map();
+  const events = [];
+  const providerRuns = [];
   const queries = [];
 
   const reply = (out) => ({
@@ -31,8 +35,7 @@ export function fakeDb(seed = {}) {
   async function fetchImpl(url, init) {
     const { query, params } = JSON.parse(init.body);
     queries.push(query);
-    // NOTE: readPublishRows and readBestEverRows both use `row_number() over`, so the
-    // best-ever branch has to be tested first or it gets swallowed by the other.
+
 
     if (/^\s*create /i.test(query)) return reply([]);
 
@@ -108,57 +111,38 @@ export function fakeDb(seed = {}) {
       return reply([...counts.entries()].sort().map(([carrier, n]) => ({ carrier, n })));
     }
 
-    if (query.includes("partition by carrier order by best_grade desc")) {
-      const [perCarrier, today] = params;
-      const perC = new Map();
-      return reply(
-        [...rows.values()]
-          .sort((a, b) => b.best_grade - a.best_grade || b.score - a.score || a.msisdn.localeCompare(b.msisdn))
-          .filter((r) => {
-            const n = (perC.get(r.carrier) || 0) + 1;
-            perC.set(r.carrier, n);
-            return n <= perCarrier;
-          })
-          .map((r) => ({
-            msisdn: r.msisdn, score: r.score, tags: r.tags, sim_type: r.sim_type,
-            carrier: r.carrier, tier: r.tier, best_grade: r.best_grade, available: r.available,
-            first_seen: r.first_seen, age_days: dayDiff(r.first_seen, today),
-          }))
-      );
+    if (query.includes("from meta where key")) {
+      const [key] = params;
+      return reply(meta.has(key) ? [{ value: meta.get(key) }] : []);
     }
 
-    if (query.includes("row_number() over")) {
-      const [perCarrier, today] = params;
-      const perC = new Map();
-      const out = [];
-      const sorted = [...rows.values()]
-        .filter((r) => r.available)
-        .sort((a, b) => b.score - a.score || a.msisdn.localeCompare(b.msisdn));
-      for (const r of sorted) {
-        const n = (perC.get(r.carrier) || 0) + 1;
-        perC.set(r.carrier, n);
-        if (n > perCarrier) continue;
-        out.push({
-          msisdn: r.msisdn, score: r.score, tags: r.tags, sim_type: r.sim_type,
-          carrier: r.carrier, tier: r.tier, best_grade: r.best_grade,
-          first_seen: r.first_seen, age_days: dayDiff(r.first_seen, today),
-          is_new: r.first_seen === today,
-        });
-      }
-      return reply(out);
+    if (query.includes("insert into meta")) {
+      const [key, value] = params;
+      meta.set(key, JSON.parse(value));
+      return reply([]);
     }
 
-    if (query.includes("left(carrier, 1)")) {
-      return reply(
-        [...rows.values()]
-          .filter((r) => r.available)
-          .sort((a, b) => a.msisdn.localeCompare(b.msisdn))
-          .map((r) => ({ msisdn: r.msisdn, c: r.carrier[0], score: r.score }))
-      );
+    if (query.includes("insert into number_events")) {
+      const [ts, day, types, msisdns, carriers, scores] = params;
+      types.forEach((type, i) => events.push({ ts, day, type, msisdn: msisdns[i], carrier: carriers[i], score: scores[i] }));
+      return reply([]);
+    }
+
+    if (query.includes("insert into provider_runs")) {
+      const [runAt, carriers, oks, trusteds, records, requests, durations, errors] = params;
+      carriers.forEach((carrier, i) => providerRuns.push({
+        run_at: runAt, carrier, ok: oks[i], trusted: trusteds[i],
+        records: records[i], requests: requests[i], duration_ms: durations[i], error: errors[i],
+      }));
+      return reply([]);
+    }
+
+    if (query.includes("delete from number_events") || query.includes("delete from provider_runs")) {
+      return reply([]); // pruning is not what these tests are about
     }
 
     throw new Error("fake-db: unhandled query: " + query.slice(0, 120));
   }
 
-  return { fetch: fetchImpl, rows, queries };
+  return { fetch: fetchImpl, rows, meta, events, providerRuns, queries };
 }
