@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Provider Status — VF Premium Numbers</title>
+<meta name="description" content="Live health of the Vodafone, Etisalat and WE number APIs: what each poll collected, how long it took, and what failed." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+<style>
+  /* Self-contained on purpose: the main dashboard's Tailwind build only knows the
+     classes used by index.html, so a new page using it would need a CSS rebuild. */
+  :root{
+    --bg:#fafafa; --panel:#fff; --line:#e5e7eb; --ink:#111827; --muted:#6b7280;
+    --ok:#10b981; --warn:#f59e0b; --bad:#ef4444; --accent:#e60000;
+    --vodafone:#e60000; --etisalat:#10b981; --we:#8b5cf6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#08080a; --panel:#0c0c0f; --line:#1f1f26; --ink:#f4f4f5; --muted:#8b8b96; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background-image:radial-gradient(900px 480px at 80% -10%, rgba(230,0,0,.07), transparent 60%);}
+  .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 60px}
+  a{color:inherit}
+  .tnum{font-variant-numeric:tabular-nums}
+  .mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,monospace}
+
+  header.top{display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;justify-content:space-between;margin-bottom:6px}
+  h1{font-size:20px;margin:0;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:13px;margin:2px 0 22px}
+  .nav{display:flex;gap:8px;align-items:center;font-size:13px}
+  .nav a{text-decoration:none;color:var(--muted);border:1px solid var(--line);
+    padding:6px 11px;border-radius:9px;background:var(--panel)}
+  .nav a:hover{color:var(--ink)}
+  .nav a[aria-current="page"]{color:var(--ink);border-color:var(--muted)}
+
+  .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .stat .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  .stat .v{font-size:22px;font-weight:700;margin-top:4px}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .card h2{font-size:15px;margin:0;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+  .dot.vodafone{background:var(--vodafone)} .dot.etisalat{background:var(--etisalat)} .dot.we{background:var(--we)}
+
+  .badge{margin-left:auto;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;
+    text-transform:uppercase;letter-spacing:.04em}
+  .badge.live{background:rgba(16,185,129,.14);color:#0f9b73}
+  .badge.stale{background:rgba(245,158,11,.16);color:#b57708}
+  .badge.down{background:rgba(239,68,68,.15);color:#dc2626}
+  .badge.idle{background:rgba(125,125,125,.15);color:var(--muted)}
+
+  .rows{margin-top:14px;display:grid;gap:7px;font-size:13px}
+  .row{display:flex;justify-content:space-between;gap:12px}
+  .row span:first-child{color:var(--muted)}
+  .row span:last-child{font-weight:600}
+
+  .spark{margin-top:14px;height:44px;width:100%;display:block;overflow:visible}
+  .sparkNote{color:var(--muted);font-size:11px;margin-top:4px}
+
+  .err{margin-top:12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.28);
+    border-radius:9px;padding:9px 11px;font-size:12px;color:#dc2626;
+    word-break:break-word;max-height:5.4em;overflow:auto}
+
+  h3.secTitle{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+    margin:30px 0 10px}
+  .tableWrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:620px}
+  th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+  tbody tr:last-child td{border-bottom:0}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .pill{font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px}
+  .pill.ok{background:rgba(16,185,129,.14);color:#0f9b73}
+  .pill.no{background:rgba(239,68,68,.15);color:#dc2626}
+  .pill.carried{background:rgba(245,158,11,.16);color:#b57708}
+
+  .notice{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}
+  .notice h2{margin:0 0 8px;font-size:16px}
+  .notice p{margin:0 0 10px;color:var(--muted);font-size:14px;line-height:1.55}
+  .notice code{background:rgba(125,125,125,.14);padding:2px 6px;border-radius:5px;font-size:12.5px}
+  .notice ol{margin:10px 0 0;padding-left:20px;color:var(--muted);font-size:14px;line-height:1.7}
+  .hidden{display:none!important}
+  .foot{color:var(--muted);font-size:12px;margin-top:26px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Provider status</h1>
+      <p class="sub" id="sub">Loading…</p>
+    </div>
+    <nav class="nav">
+      <a href="./index.html">Numbers</a>
+      <a href="./status.html" aria-current="page">Status</a>
+    </nav>
+  </header>
+
+  <div id="notice" class="notice hidden"></div>
+
+  <div id="live" class="hidden">
+    <section class="summary" id="summary"></section>
+    <section class="cards" id="cards"></section>
+
+    <h3 class="secTitle">Recent polls</h3>
+    <div class="tableWrap">
+      <table>
+        <thead>
+          <tr>
+            <th>When</th><th>Provider</th><th>Result</th>
+            <th class="num">Numbers</th><th class="num">Requests</th><th class="num">Took</th>
+          </tr>
+        </thead>
+        <tbody id="pollRows"></tbody>
+      </table>
+    </div>
+
+    <p class="foot" id="foot"></p>
+  </div>
+</div>
+
+<script src="./config.js"></script>
+<script type="module">
+import { fetchProviderRuns, isConfigured } from "./db.js";
+
+const CARRIER_LABEL = { vodafone: "Vodafone", etisalat: "Etisalat", we: "WE" };
+const $ = (id) => document.getElementById(id);
+const fmtInt = (n) => (Number(n) || 0).toLocaleString();
+
+function relTime(iso) {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "unknown";
+  const s = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (s < 60) return s + "s ago";
+  const m = Math.round(s / 60);
+  if (m < 60) return m + " min ago";
+  const h = Math.round(m / 60);
+  if (h < 48) return h + " hr ago";
+  return Math.round(h / 24) + " d ago";
+}
+
+function fmtDuration(ms) {
+  const n = Number(ms) || 0;
+  if (n < 1000) return n + "ms";
+  if (n < 60000) return (n / 1000).toFixed(1) + "s";
+  const m = Math.floor(n / 60000);
+  return m + "m " + Math.round((n % 60000) / 1000) + "s";
+}
+
+/** A provider's state, from its most recent poll. */
+function stateOf(latest, ageMinutes) {
+  if (!latest) return { key: "idle", label: "No data" };
+  if (!latest.ok) return { key: "down", label: "Failing" };
+  if (!latest.trusted) return { key: "stale", label: "Carried over" };
+  if (ageMinutes > 90) return { key: "stale", label: "Stale" };
+  return { key: "live", label: "Live" };
+}
+
+/** Minimal inline sparkline of a numeric series. */
+function sparkline(values, color) {
+  const w = 300, h = 44, pad = 3;
+  if (!values.length) return "";
+  const max = Math.max(...values), min = Math.min(...values);
+  const span = max - min || 1;
+  const step = values.length > 1 ? (w - pad * 2) / (values.length - 1) : 0;
+  const pts = values.map((v, i) => {
+    const x = pad + i * step;
+    const y = h - pad - ((v - min) / span) * (h - pad * 2);
+    return x.toFixed(1) + "," + y.toFixed(1);
+  });
+  return (
+    '<svg class="spark" viewBox="0 0 ' + w + " " + h + '" preserveAspectRatio="none" aria-hidden="true">' +
+    '<polyline fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="' + pts.join(" ") + '"/>' +
+    '<circle cx="' + pts[pts.length - 1].split(",")[0] + '" cy="' + pts[pts.length - 1].split(",")[1] + '" r="2.6" fill="' + color + '"/>' +
+    "</svg>"
+  );
+}
+
+function showNotice(title, html) {
+  $("live").classList.add("hidden");
+  $("notice").classList.remove("hidden");
+  $("notice").innerHTML = "<h2></h2>" + html;
+  $("notice").querySelector("h2").textContent = title;
+  $("sub").textContent = "";
+}
+
+function render(runs) {
+  const byCarrier = new Map();
+  for (const r of runs) {
+    if (!byCarrier.has(r.carrier)) byCarrier.set(r.carrier, []);
+    byCarrier.get(r.carrier).push(r);
+  }
+  // Each carrier's rows arrive newest-first; charts want oldest-first.
+  for (const list of byCarrier.values()) list.reverse();
+
+  const carriers = [...byCarrier.keys()].sort();
+  const latestAll = runs.length ? runs[0] : null;
+  const totalNumbers = carriers.reduce((a, c) => {
+    const l = byCarrier.get(c).at(-1);
+    return a + (l?.trusted || l?.ok ? Number(l.records) || 0 : 0);
+  }, 0);
+  const failing = carriers.filter((c) => {
+    const l = byCarrier.get(c).at(-1);
+    return l && !l.ok;
+  });
+
+  $("sub").textContent =
+    "Read live from Postgres · last poll " + (latestAll ? relTime(latestAll.run_at) : "unknown");
+
+  const summaryPairs = [
+    ["Providers healthy", carriers.length - failing.length + " / " + carriers.length],
+    ["Numbers last collected", fmtInt(totalNumbers)],
+    ["Last poll", latestAll ? relTime(latestAll.run_at) : "\u2014"],
+    ["Polls recorded", fmtInt(runs.length)],
+  ];
+  $("summary").innerHTML = "";
+  for (const [k, v] of summaryPairs) {
+    const box = document.createElement("div");
+    box.className = "stat";
+    const key = document.createElement("div");
+    key.className = "k";
+    key.textContent = k;
+    const val = document.createElement("div");
+    val.className = "v tnum";
+    val.textContent = v;
+    box.append(key, val);
+    $("summary").appendChild(box);
+  }
+
+  const colorOf = (c) =>
+    getComputedStyle(document.documentElement).getPropertyValue("--" + c).trim() || "#888";
+
+  $("cards").innerHTML = "";
+  for (const carrier of carriers) {
+    const list = byCarrier.get(carrier);
+    const latest = list.at(-1);
+    const ageMin = latest ? (Date.now() - Date.parse(latest.run_at)) / 60000 : Infinity;
+    const st = stateOf(latest, ageMin);
+    const okCount = list.filter((r) => r.ok).length;
+
+    const card = document.createElement("div");
+    card.className = "card";
+
+    const h2 = document.createElement("h2");
+    const dot = document.createElement("span");
+    dot.className = "dot " + carrier;
+    const name = document.createElement("span");
+    name.textContent = CARRIER_LABEL[carrier] || carrier;
+    const badge = document.createElement("span");
+    badge.className = "badge " + st.key;
+    badge.textContent = st.label;
+    h2.append(dot, name, badge);
+    card.appendChild(h2);
+
+    const rows = document.createElement("div");
+    rows.className = "rows";
+    const pairs = [
+      ["Numbers collected", fmtInt(latest?.records)],
+      ["Requests used", fmtInt(latest?.requests)],
+      ["Poll duration", fmtDuration(latest?.duration_ms)],
+      ["Last poll", latest ? relTime(latest.run_at) : "—"],
+      ["Succeeded", okCount + " of last " + list.length],
+    ];
+    for (const [k, v] of pairs) {
+      const row = document.createElement("div");
+      row.className = "row";
+      const a = document.createElement("span");
+      a.textContent = k;
+      const b = document.createElement("span");
+      b.textContent = v;
+      b.className = "tnum";
+      row.append(a, b);
+      rows.appendChild(row);
+    }
+    card.appendChild(rows);
+
+    // Only successful polls: a failed one collected nothing, and plotting that as a
+    // zero would read as the carrier's inventory vanishing rather than a fetch failing.
+    const series = list.filter((r) => r.ok).map((r) => Number(r.records) || 0);
+    if (series.length > 1) {
+      card.insertAdjacentHTML("beforeend", sparkline(series, colorOf(carrier)));
+      const note = document.createElement("p");
+      note.className = "sparkNote";
+      note.textContent = "Numbers collected over the last " + series.length + " successful polls";
+      card.appendChild(note);
+    }
+
+    if (latest && !latest.ok && latest.error) {
+      const err = document.createElement("div");
+      err.className = "err";
+      err.textContent = latest.error;
+      card.appendChild(err);
+    }
+
+    $("cards").appendChild(card);
+  }
+
+  // Recent polls, newest first, across all providers.
+  const tbody = $("pollRows");
+  tbody.innerHTML = "";
+  for (const r of runs.slice(0, 36)) {
+    const tr = document.createElement("tr");
+    const cells = [
+      relTime(r.run_at),
+      CARRIER_LABEL[r.carrier] || r.carrier,
+      null, // result pill
+      fmtInt(r.records),
+      fmtInt(r.requests),
+      fmtDuration(r.duration_ms),
+    ];
+    cells.forEach((val, i) => {
+      const td = document.createElement("td");
+      if (i >= 3) td.className = "num";
+      if (i === 2) {
+        const pill = document.createElement("span");
+        pill.className = "pill " + (!r.ok ? "no" : r.trusted ? "ok" : "carried");
+        pill.textContent = !r.ok ? "failed" : r.trusted ? "ok" : "carried over";
+        td.appendChild(pill);
+      } else {
+        td.textContent = val;
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  }
+
+  $("foot").textContent =
+    "“Carried over” means the provider answered but with too little to trust, so its " +
+    "numbers were refreshed and none were retired. Refreshes every " +
+    (window.VF_CONFIG?.refreshSeconds || 60) + "s.";
+
+  $("notice").classList.add("hidden");
+  $("live").classList.remove("hidden");
+}
+
+async function load() {
+  if (!isConfigured()) {
+    showNotice("Not connected to the database yet", [
+      "<p>This page reads Postgres live, which needs the Neon Data API switched on.</p>",
+      "<ol>",
+      "<li>Neon console → your project → <strong>Data API</strong> → Enable.</li>",
+      "<li>Copy the REST endpoint it shows you.</li>",
+      "<li>Put it in <code>web/config.js</code> as <code>base</code>.</li>",
+      "</ol>",
+    ].join(""));
+    return;
+  }
+  try {
+    const runs = await fetchProviderRuns(window.VF_CONFIG?.statusWindow || 48);
+    if (!runs.length) {
+      showNotice("No polls recorded yet", "<p>The next scheduled poll will populate this page.</p>");
+      return;
+    }
+    render(runs);
+  } catch (err) {
+    showNotice("Couldn't reach the database", "<p></p>");
+    $("notice").querySelector("p").textContent = String(err.message || err);
+  }
+}
+
+load();
+setInterval(load, Math.max(15, Number(window.VF_CONFIG?.refreshSeconds) || 60) * 1000);
+</script>
+</body>
+</html>
