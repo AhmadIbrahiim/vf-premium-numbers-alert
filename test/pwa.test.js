@@ -7,6 +7,9 @@ import manifest from "../app/manifest.js";
  * Installability is all-or-nothing and fails silently: if the manifest is missing a
  * required field or an icon file is absent, the browser simply never offers to install
  * and reports nothing. These assertions are the only warning we get.
+ *
+ * Manifest, icon files and headers only. The service worker's behaviour is tested
+ * by executing it, in sw.test.js.
  */
 
 const root = (p) => new URL(`../${p}`, import.meta.url);
@@ -78,25 +81,6 @@ test("the apple-touch-icon exists at 180x180", async () => {
   const buf = await readFile(root("public/apple-touch-icon.png"));
   assert.equal(buf.readUInt32BE(16), 180);
   assert.equal(buf.readUInt32BE(20), 180);
-});
-
-test("the service worker never caches navigations or the API", async () => {
-  const sw = await readFile(root("public/sw.js"), "utf8");
-  // Pages are server-rendered from live Postgres. Serving a cached page would show
-  // stale numbers, which is worse than showing the offline notice.
-  assert.match(sw, /\/api\//, "must special-case /api");
-  assert.match(sw, /OFFLINE_URL/, "must have an offline fallback");
-  assert.ok(
-    !/cache\.put\(request/.test(sw.split("isStaticAsset")[0]),
-    "must not put navigations in the cache"
-  );
-});
-
-test("the service worker precaches the offline page it falls back to", async () => {
-  const sw = await readFile(root("public/sw.js"), "utf8");
-  const offline = await stat(root("public/offline.html")).catch(() => null);
-  assert.ok(offline?.isFile(), "offline.html must exist or the fallback returns an error");
-  assert.match(sw, /PRECACHE/, "offline page must be precached at install time");
 });
 
 test("sw.js is served uncached, or updates can never reach clients", async () => {

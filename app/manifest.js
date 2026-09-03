@@ -17,7 +17,6 @@ export default function manifest() {
     // standalone is unsupported.
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],
-    orientation: "portrait-primary",
     // Matches the light-theme page background so there is no flash on launch.
     background_color: "#fafafa",
     theme_color: "#e60000",

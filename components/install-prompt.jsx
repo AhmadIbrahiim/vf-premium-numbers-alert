@@ -10,9 +10,10 @@ import { useCallback, useEffect, useState } from "react";
  *   - **Chromium (Android, desktop)** fires `beforeinstallprompt`. We stop the browser's
  *     own mini-infobar, keep the event, and call `prompt()` from our button. Next's own
  *     docs warn against relying on this event alone precisely because of the second case.
- *   - **iOS Safari** has no such event and never will; installation is only possible
- *     through Share → Add to Home Screen. All we can do is show those instructions, so
- *     that is exactly what we do — and only on iOS, where they are true.
+ *   - **iOS and iPadOS** fire no such event in any browser — every engine there is
+ *     WebKit, and installing is only possible through Share → Add to Home Screen. All we
+ *     can do is describe those steps, so that is what we do, and only on Apple mobile
+ *     where they are true.
  *
  * Restraint matters more than reach here. The prompt is suppressed when already
  * installed, and a dismissal is remembered for DISMISS_DAYS so the app does not nag.
@@ -46,7 +47,8 @@ function dismissedRecently() {
 }
 
 export default function InstallPrompt() {
-  // `null` until mounted, so the server and the first client render agree.
+  // Starts hidden and is only ever shown from an effect, so the server render and the
+  // first client render agree on rendering nothing.
   const [visible, setVisible] = useState(false);
   const [promptEvent, setPromptEvent] = useState(null);
   const [showIosHelp, setShowIosHelp] = useState(false);
@@ -55,16 +57,17 @@ export default function InstallPrompt() {
   useEffect(() => {
     if (isInstalled() || dismissedRecently()) return;
 
-    // iOS detection is by necessity user-agent based: there is no feature to test for,
-    // because the capability we need (an install event) simply does not exist there.
+    // Apple detection is by necessity user-agent based: there is no feature to test for,
+    // because the capability we need (an install event) does not exist there at all.
     const ua = window.navigator.userAgent;
     const ios = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
     // iPadOS 13+ reports itself as a Mac; a touch-capable "Mac" is really an iPad.
     const iPadOs = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
-    const appleMobile = ios || iPadOs;
-    const isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(ua);
 
-    if (appleMobile && isSafari) {
+    // Deliberately not gated on Safari: Chrome and Firefox on iOS are WebKit too and
+    // offer the same Share → Add to Home Screen, so gating on Safari would leave them
+    // with no path at all.
+    if (ios || iPadOs) {
       setIsIos(true);
       setVisible(true);
       return;
@@ -107,12 +110,20 @@ export default function InstallPrompt() {
       return;
     }
     if (!promptEvent) return;
-    promptEvent.prompt();
-    const { outcome } = await promptEvent.userChoice;
-    // The event is single-use whatever the answer, so drop it either way.
+    // The event is single-use whatever happens, so it is dropped in every branch —
+    // including a rejection, which otherwise leaves the button live but inert.
     setPromptEvent(null);
-    if (outcome === "dismissed") dismiss();
-    else setVisible(false);
+    try {
+      promptEvent.prompt();
+      const { outcome } = await promptEvent.userChoice;
+      if (outcome === "dismissed") dismiss();
+      else setVisible(false);
+    } catch (err) {
+      // An already-consumed or invalidated event: hide the prompt rather than leave a
+      // button that silently does nothing.
+      console.warn("install prompt failed:", err?.message || err);
+      setVisible(false);
+    }
   }, [isIos, promptEvent, dismiss]);
 
   if (!visible) return null;
@@ -149,7 +160,7 @@ export default function InstallPrompt() {
       {showIosHelp ? (
         <ol className="mt-3 space-y-1 border-t border-zinc-100 pt-3 text-[12px] text-zinc-600 dark:border-white/[0.06] dark:text-zinc-300">
           <li>
-            1. Tap the <strong>Share</strong> button in Safari&apos;s toolbar.
+            1. Tap the <strong>Share</strong> button in the browser toolbar.
           </li>
           <li>
             2. Scroll down and choose <strong>Add to Home Screen</strong>.

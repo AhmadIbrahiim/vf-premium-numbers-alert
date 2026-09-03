@@ -11,10 +11,23 @@ import { useEffect } from "react";
  *
  * `updateViaCache: "none"` stops the browser caching the worker script itself, which is
  * the classic way to ship a service worker that can never be updated.
+ *
+ * Production only. Service workers do run on localhost, but dev `/_next/static/` URLs
+ * are rebuilt without changing name, so caching them cache-first serves stale chunks
+ * and breaks hot reload. In dev we actively unregister instead, because a worker
+ * installed once keeps controlling localhost across every future dev session.
  */
 export default function ServiceWorker() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
+
+    if (process.env.NODE_ENV !== "production") {
+      navigator.serviceWorker.getRegistrations().then(
+        (regs) => regs.forEach((r) => r.unregister()),
+        () => {}
+      );
+      return;
+    }
 
     function register() {
       navigator.serviceWorker

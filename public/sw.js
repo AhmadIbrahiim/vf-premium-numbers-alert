@@ -7,26 +7,28 @@
  *
  *   - Navigations: network-first, falling back to a cached offline page. Never serve a
  *     cached page as if it were current data.
- *   - Static build assets (/_next/static, icons): cache-first. They are content-hashed
- *     or stable, so they can never go stale.
- *   - Everything else, including /api: not touched. API responses are live data and
- *     already carry their own Cache-Control headers.
+ *   - /_next/static: cache-first. These URLs contain a content hash, so a cache hit is
+ *     correct by construction.
+ *   - Everything else — icons, the manifest, /api: not intercepted at all. Those URLs
+ *     are stable rather than content-hashed, so caching them here would pin a stale
+ *     icon or manifest indefinitely; the browser's own HTTP cache handles them.
  *
- * Bumping CACHE deploys a new cache and drops the old one in `activate`.
+ * Only caches whose name starts with CACHE_PREFIX are ever deleted, so this worker
+ * cannot disturb a cache belonging to anything else on the origin.
  */
 
-const CACHE = "eg-numbers-v1";
+const CACHE_PREFIX = "eg-numbers-";
+const CACHE = `${CACHE_PREFIX}v2`;
 const OFFLINE_URL = "/offline.html";
-
-// Only what is needed to render the offline fallback.
-const PRECACHE = [OFFLINE_URL, "/icon-192.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE);
-      // Individually, so one failed asset cannot abort the whole install.
-      await Promise.allSettled(PRECACHE.map((url) => cache.add(new Request(url, { cache: "reload" }))));
+      // Not allSettled: this worker's only job when offline is to serve this page, so a
+      // version that failed to cache it must not install. A rejection here leaves the
+      // previous worker in place, which is the safe outcome.
+      await cache.add(new Request(OFFLINE_URL, { cache: "reload" }));
       // Take over without waiting for every existing tab to close.
       await self.skipWaiting();
     })()
@@ -37,7 +39,9 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
       const keys = await caches.keys();
-      await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+      await Promise.all(
+        keys.filter((k) => k.startsWith(CACHE_PREFIX) && k !== CACHE).map((k) => caches.delete(k))
+      );
       // Enable navigation preload where supported: lets the browser start the network
       // request in parallel with booting this worker, so the SW adds no latency.
       if (self.registration.navigationPreload) {
@@ -48,12 +52,9 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-/** Build assets are content-addressed, so a cache hit is always correct. */
-function isStaticAsset(url) {
-  return (
-    url.pathname.startsWith("/_next/static/") ||
-    /\.(?:png|svg|ico|webmanifest|woff2?)$/.test(url.pathname)
-  );
+/** Content-hashed build output, and nothing else — a hit is always the right bytes. */
+function isImmutableAsset(url) {
+  return url.pathname.startsWith("/_next/static/");
 }
 
 self.addEventListener("fetch", (event) => {
@@ -84,22 +85,18 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (isStaticAsset(url)) {
+  if (isImmutableAsset(url)) {
     event.respondWith(
       (async () => {
         const cache = await caches.open(CACHE);
         const hit = await cache.match(request);
         if (hit) return hit;
         const res = await fetch(request);
-        // Opaque/error responses are not worth storing.
-        if (res && res.ok) cache.put(request, res.clone());
+        // Hold the event open until the write finishes: the browser is free to kill the
+        // worker as soon as the response resolves, which would drop a pending put().
+        if (res && res.ok) event.waitUntil(cache.put(request, res.clone()));
         return res;
       })()
     );
   }
-});
-
-// Lets the page trigger an immediate update instead of waiting for a navigation.
-self.addEventListener("message", (event) => {
-  if (event.data === "SKIP_WAITING") self.skipWaiting();
 });

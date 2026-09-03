@@ -36,11 +36,12 @@
     The numbers are read live, so there is nothing useful to show without a connection.
     Reconnect and try again.
   </p>
-  <button type="button" onclick="location.reload()">Try again</button>
+  <button type="button" id="retry">Try again</button>
 </main>
 <script>
   // Reload automatically the moment connectivity returns.
   addEventListener("online", () => location.reload());
+  document.getElementById("retry").addEventListener("click", () => location.reload());
 </script>
 </body>
 </html>
