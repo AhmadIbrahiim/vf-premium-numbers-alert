@@ -103,6 +103,13 @@ export default function InstallPrompt() {
     };
   }, []);
 
+  // Reserve room at the end of the page while the sheet is up; see globals.css.
+  useEffect(() => {
+    if (!visible) return;
+    document.body.classList.add("install-prompt-open");
+    return () => document.body.classList.remove("install-prompt-open");
+  }, [visible]);
+
   const dismiss = useCallback(() => {
     setVisible(false);
     try {

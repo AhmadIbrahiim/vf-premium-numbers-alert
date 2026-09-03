@@ -16,6 +16,15 @@ body {
     #08080a;
 }
 
+/*
+ * While the install sheet is up it floats over the bottom of the page, which would
+ * otherwise hide the last row and the "Show more" button. Only needed where the sheet
+ * spans the full width; above sm: it is a small floating card clear of the content.
+ */
+@media (max-width: 639px) {
+  body.install-prompt-open { padding-bottom: 11rem; }
+}
+
 /* Tabular figures everywhere a number is compared down a column. */
 .num-tnum { font-variant-numeric: tabular-nums; }
 
