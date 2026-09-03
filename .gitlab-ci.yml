@@ -1,14 +1,24 @@
 # GitLab CI — runs the poller. The dashboard is deployed by Vercel, not from here.
 #
-# Two jobs:
-#   test  — on pushes and merge requests. No install step: the poller has no
-#           dependencies, so `node --test` runs against plain Node.
-#   poll  — on a pipeline schedule (or a manual run). Fetches all three carriers and
-#           writes to Postgres.
+# Three jobs:
+#   test         — on pushes and merge requests. No install step: the poller has no
+#                  dependencies, so `node --test` runs against plain Node.
+#   poll         — on a pipeline schedule (or a manual run). Fetches all three carriers
+#                  and writes to Postgres.
+#   check-stale  — on its own schedule. Emails if no poll has landed recently.
 #
-# The schedule is NOT defined in this file. GitLab keeps pipeline schedules in project
-# settings: CI/CD → Schedules → New schedule, cron `7,37 * * * *`, target branch `main`.
-# Without that, `poll` never runs on its own.
+# The schedules are NOT defined in this file. GitLab keeps pipeline schedules in
+# project settings: CI/CD → Schedules. Two are needed:
+#
+#   1. cron `7,37 * * * *`, target `main`  — runs `poll` (every 30 minutes)
+#   2. cron `23 * * * *`,   target `main`, variable `CHECK_STALE=1`
+#                                          — runs `check-stale` (hourly)
+#
+# Without (1) the poller never runs on its own, and for most of this project's life it
+# did not: every recorded poll had been triggered by hand. Nothing said so, because the
+# dashboard keeps serving the last numbers it collected. (2) exists to make that state
+# announce itself, which is why it is a separate schedule and a separate job — a check
+# that runs inside the poll job reports nothing when the poll job is what is broken.
 
 # Pinned to the runtime the test suite is actually exercised against. Bumping this is
 # fine but re-run `node --test` first — the poller leans on undici behaviour (connect
@@ -18,6 +28,7 @@ image: node:20-alpine
 stages:
   - test
   - poll
+  - check
 
 test:
   stage: test
@@ -54,6 +65,27 @@ poll:
       fi
     - node src/run.js
   rules:
+    # The staleness schedule sets CHECK_STALE, and must never trigger a poll — that
+    # would both double the carrier load and defeat the check by refreshing the very
+    # timestamp it is about to read.
+    - if: $CHECK_STALE
+      when: never
     # `schedule` is the cron pipeline; `web` is the Run pipeline button.
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web"
+
+# Dead-man's switch for the poller. One query, no carrier requests, so it is cheap to
+# run often. Exits non-zero when stale, so the pipeline goes red as well as sending
+# mail — two independent signals, and a red pipeline is visible without opening email.
+check-stale:
+  stage: check
+  timeout: 5 minutes
+  script:
+    - |
+      if [ -z "$DATABASE_URL" ]; then
+        echo "DATABASE_URL is not set. Add it under Settings -> CI/CD -> Variables"
+        exit 1
+      fi
+    - node src/check-stale.js
+  rules:
+    - if: $CHECK_STALE

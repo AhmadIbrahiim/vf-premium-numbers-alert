@@ -11,6 +11,7 @@
     "build": "next build",
     "start": "next start",
     "poll": "node src/run.js",
+    "check-stale": "node src/check-stale.js",
     "test": "node --test"
   },
   "license": "MIT",

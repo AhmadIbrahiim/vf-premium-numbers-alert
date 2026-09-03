@@ -394,12 +394,66 @@ only the search box defines a `focus-visible` style, but the browser's default r
 shows on all interactive elements, verified by tabbing through them and reading computed
 `outline`. Don't add a custom ring on the assumption it is missing.
 
+## The poller had no schedule at all, and nothing said so
+
+For most of this project's life the poller **never ran on its own**. `.gitlab-ci.yml`
+documented cron `7,37 * * * *`, but the GitLab pipeline schedule was never created, and
+the `poll` job only fires on `schedule` or `web`. Every recorded poll had been triggered
+by hand.
+
+Measured before fixing it: 10 polls across ~20.3 hours, gaps of 11/17/60/98/122/133/150/
+304/325 minutes, at scattered minutes rather than clustered on :07 and :37. A real
+30-minute cron would have produced ~41 polls in that window. **That arithmetic — expected
+count vs actual count over a known window — is the check; the cron string in the repo
+proves nothing, because the schedule does not live in the repo.**
+
+Nothing surfaced it, and this is the part worth remembering: the dashboard keeps serving
+the last numbers it collected, so a dead poller looks exactly like a working site with
+quiet inventory.
+
+### The staleness check is a separate job on a separate schedule, on purpose
+
+`src/stale.js` + `src/check-stale.js` (`npm run check-stale`) read the newest
+`provider_runs.run_at` and email via Resend when it is older than
+`STALE_AFTER_MINUTES` (default 90 — two missed polls, matching the 90-minute mark the
+status page already calls "Stale").
+
+**It must never be folded into the poll job.** A check that ships inside the thing it
+watches reports nothing when that thing is dead, which is the only case that matters. It
+gets its own GitLab schedule with the variable `CHECK_STALE=1`; the `poll` job carries an
+`- if: $CHECK_STALE / when: never` rule *first*, so the staleness schedule cannot trigger
+a poll — that would both double the carrier load and defeat the check by refreshing the
+very timestamp it is about to read.
+
+Details that are deliberate:
+
+- **A failed send does not start the cooldown.** Resend 403s when the recipient is not
+  the account owner; if that wrote the marker, a real outage would go quiet for 6 hours.
+- **A cooldown of 6 hours** (`STALE_ALERT_COOLDOWN_MINUTES`), kept in `meta.stale_alert`.
+  Hourly checks against a day-long outage would otherwise send 24 identical emails, and
+  that is what gets a mail rule written to hide them.
+- **Every ambiguous state fails toward alerting**: no polls ever recorded, an unreadable
+  timestamp, a corrupt cooldown marker, and a database it cannot reach all report stale.
+- **Exit 1 when stale**, so the pipeline goes red as well as mailing — a red pipeline is
+  visible in the GitLab UI without opening email.
+- The email names the missing pipeline schedule as the first likely cause, because that
+  is the failure that actually happened and nobody guesses it.
+
+Cost data behind the 30-minute cadence, measured over 9 polls: a poll is **252-332s**
+(Etisalat ~110s / 511 requests, WE ~170s / 2,443 requests, Vodafone ~5s / 4 requests),
+so 30 minutes leaves ~25 minutes idle against a WE throttle that needs 2-20 minutes of
+quiet. Two polls once ran **11 minutes apart** and both completed with `trusted=true`, so
+30 minutes has real margin. Across 27 carrier-runs there were zero failures and zero
+carried-over runs.
+
 ## Commands
 
 ```bash
 node --test                            # poller + query tests, no deps needed
 
 DATABASE_URL=postgres://... npm run poll             # live dry run
+DATABASE_URL=postgres://... npm run check-stale      # is the poller keeping up? exit 1 if not
+STALE_AFTER_MINUTES=30 ... npm run check-stale       # force the stale path to check it works
 WE_GRADE_MIN=17 WE_GRADE_MAX=17 ...                  # scope WE while developing
 REGRADE=1 ...                                        # bypass the LLM grade cache
 

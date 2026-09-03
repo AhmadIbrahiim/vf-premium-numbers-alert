@@ -131,31 +131,28 @@ export function buildEmail({ rows, dashboardUrl = "", threshold }) {
 const DEFAULT_FROM = "VF Premium Numbers <onboarding@resend.dev>";
 
 /**
- * Email the alerted numbers via Resend. Never throws.
+ * Post one already-built message to Resend. Never throws.
+ *
+ * The transport lives here on its own so anything else that needs to mail (the
+ * staleness alert in `src/stale.js`) reuses this exact path — same credential
+ * handling, same failure semantics — rather than a second copy of the POST.
  *
  * Credentials are read from the environment at call time (not captured at import), so
  * the value in effect when the poll runs is the one used.
  *
- * @param {Array<object>} rows - alerted numbers; no mail is sent when empty
- * @param {object} opts - { apiKey, to, from, dashboardUrl, threshold, fetchImpl }
+ * @param {{ subject: string, text: string, html: string }} message
+ * @param {object} opts - { apiKey, to, from, fetchImpl }
  * @returns {Promise<string>} status string for the run summary
  */
-export async function sendPremiumEmail(rows, opts = {}) {
+export async function sendViaResend({ subject, text, html }, opts = {}) {
   const doFetch = opts.fetchImpl || globalThis.fetch;
   const apiKey = opts.apiKey ?? process.env.RESEND_API_KEY ?? "";
   const to = opts.to ?? process.env.ALERT_EMAIL_TO ?? "";
   const from = opts.from ?? process.env.ALERT_EMAIL_FROM ?? DEFAULT_FROM;
-  if (!rows || rows.length === 0) return "no-new-premium";
   if (!apiKey || !to) {
     console.warn("[email] RESEND_API_KEY / ALERT_EMAIL_TO not set — skipping email");
     return "skipped-no-credentials";
   }
-
-  const { subject, text, html } = buildEmail({
-    rows,
-    dashboardUrl: opts.dashboardUrl,
-    threshold: opts.threshold,
-  });
 
   try {
     const res = await doFetch(RESEND_ENDPOINT, {
@@ -179,4 +176,21 @@ export async function sendPremiumEmail(rows, opts = {}) {
     console.warn(`[email] error: ${err?.message || err}`);
     return "error";
   }
+}
+
+/**
+ * Email the alerted numbers via Resend. Never throws.
+ *
+ * @param {Array<object>} rows - alerted numbers; no mail is sent when empty
+ * @param {object} opts - { apiKey, to, from, dashboardUrl, threshold, fetchImpl }
+ * @returns {Promise<string>} status string for the run summary
+ */
+export async function sendPremiumEmail(rows, opts = {}) {
+  if (!rows || rows.length === 0) return "no-new-premium";
+  const message = buildEmail({
+    rows,
+    dashboardUrl: opts.dashboardUrl,
+    threshold: opts.threshold,
+  });
+  return sendViaResend(message, opts);
 }
