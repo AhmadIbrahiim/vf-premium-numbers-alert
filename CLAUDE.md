@@ -246,6 +246,55 @@ surprising. Anything env-dependent that must reflect the current environment rea
 (in `src/email.js`), and `ALERT_THRESHOLD` (in `src/run.js`). This bit twice — a
 cache-busted `import()` in tests still gets the *same* `config.js` instance.
 
+## The PWA — the service worker is the part that can hurt you
+
+Installable via `app/manifest.js` (Next's metadata route, served at
+`/manifest.webmanifest`), `public/sw.js`, and `components/install-prompt.jsx`.
+
+**The service worker is the only component here that can break the site for a user who
+then cannot fetch the fix**, because it keeps serving until something replaces it. That
+is why `/sw.js` is sent `no-store` from `next.config.mjs` — a cached worker is close to
+unfixable — and why the caching rules are narrow:
+
+- **Navigations: network-first, never cached.** Every page renders live Postgres data. A
+  cached page would later be served as if current, showing numbers that are gone. The
+  fallback is `public/offline.html`, which deliberately shows no figures at all.
+- **Cache-first only for `/_next/static/`.** Those URLs carry a content hash, so a hit is
+  correct by construction. It once matched every same-origin png/svg/ico/webmanifest/woff
+  — those URLs are *stable*, not hashed, so the icons and the manifest were pinned at
+  their first-seen bytes and a manifest fix could never reach an installed user.
+- **`/api` is not touched**, including a navigation to an API URL typed into the address
+  bar — otherwise that navigation is answered with the offline HTML page.
+- **Deletion is scoped by the `eg-numbers-` prefix.** `caches.keys()` is origin-wide.
+- Precaching the offline page uses a bare `cache.add`, not `allSettled`: a version that
+  installed without its own fallback would control every tab and answer outages with
+  `Response.error()` forever. Failing install leaves the previous worker, which is safe.
+- `cache.put` goes through `event.waitUntil` — the browser may kill the worker as soon as
+  the response resolves and drop a pending write.
+
+**The worker does not register in development.** Service workers do run on localhost, and
+dev `/_next/static/` URLs are rebuilt without changing name, so cache-first serves stale
+chunks and interferes with hot reload. `components/service-worker.jsx` unregisters in dev
+instead, because a worker installed once keeps controlling localhost across every later
+dev session. If localhost behaves impossibly, check for a leftover worker first.
+
+Icon rules that fail *silently* — the browser just never offers to install, with no error
+anywhere: a 192px **and** a 512px icon are both required, and maskable icons must be
+separate entries from `purpose: "any"` ones (Android crops maskable icons to the device
+silhouette, so one icon claiming both purposes is wrong in one of its two roles). iOS
+uses `/apple-touch-icon.png` at 180x180 for the home screen regardless of the manifest.
+
+Installation cannot be triggered from script. Chromium fires `beforeinstallprompt`, which
+is stashed and replayed from a real button — a `prompt()` not tied to a user gesture is
+ignored permanently. iOS fires nothing in *any* browser (they are all WebKit), so there
+the prompt shows Share → Add to Home Screen steps; do not gate that on a Safari UA test
+or Chrome/Firefox on iOS get no path at all.
+
+Tests: `test/sw.test.js` runs the worker for real in a fake `ServiceWorkerGlobalScope`
+(`test/helpers/sw-env.js`). Asserting on the worker's *source text* is close to
+worthless — a grep for `"/api/"` passes whether or not API requests are bypassed. When
+changing the worker, mutation-test it: revert a rule and confirm a test fails.
+
 ## Commands
 
 ```bash
