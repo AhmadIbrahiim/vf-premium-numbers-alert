@@ -183,3 +183,65 @@ test("readEvents returns the newest events first", async () => {
   assert.deepEqual(rows, []); // none recorded in this fake
   assert.ok(fake.queries.some((q) => /from number_events/.test(q)));
 });
+
+test("recordNumberEvents keeps the highest-scoring events, not the first ones", async () => {
+  const fake = fakeDb();
+  // 5 new numbers, only 2 slots. The two best scores must be the ones stored.
+  const scoreMap = new Map([
+    ["01000000001", { score: 5 }],
+    ["01000000002", { score: 55 }],
+    ["01000000003", { score: 9 }],
+    ["01000000004", { score: 41 }],
+    ["01000000005", { score: 2 }],
+  ]);
+  await db.recordNumberEvents(
+    {
+      newMsisdns: [...scoreMap.keys()],
+      disappearedMsisdns: [],
+      today: "2026-09-03",
+      ts: "2026-09-03T12:00:00Z",
+      scoreMap,
+      perType: 2,
+    },
+    opts(fake)
+  );
+  assert.deepEqual(
+    fake.events.map((e) => e.msisdn),
+    ["01000000002", "01000000004"],
+    "kept the two best-scoring arrivals"
+  );
+});
+
+test("recordNumberEvents does not let one type crowd out the other", async () => {
+  const fake = fakeDb();
+  const scoreMap = new Map([
+    ["01000000001", { score: 50 }],
+    ["01000000002", { score: 40 }],
+    ["01100000001", { score: 30 }],
+    ["01100000002", { score: 20 }],
+  ]);
+  await db.recordNumberEvents(
+    {
+      newMsisdns: ["01000000001", "01000000002"],
+      disappearedMsisdns: ["01100000001", "01100000002"],
+      today: "2026-09-03",
+      ts: "2026-09-03T12:00:00Z",
+      scoreMap,
+      perType: 1,
+    },
+    opts(fake)
+  );
+  // A flat cap applied to new+gone concatenated would have stored two NEW and no GONE.
+  assert.deepEqual(fake.events.map((e) => e.type).sort(), ["gone", "new"]);
+});
+
+test("recordNumberEvents prunes by poll so one churny poll cannot erase history", async () => {
+  const fake = fakeDb();
+  await db.recordNumberEvents(
+    { newMsisdns: [], disappearedMsisdns: [], today: "2026-09-03", ts: "2026-09-03T12:00:00Z", keepPolls: 5 },
+    opts(fake)
+  );
+  const prune = fake.queries.find((q) => /delete from number_events/.test(q));
+  assert.ok(prune, "issues a prune");
+  assert.match(prune, /distinct ts/, "prunes whole polls, not individual rows");
+});

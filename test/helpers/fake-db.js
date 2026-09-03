@@ -138,7 +138,7 @@ export function fakeDb(seed = {}) {
     }
 
     if (query.includes("delete from number_events") || query.includes("delete from provider_runs")) {
-      return reply([]); // pruning is not what these tests are about
+      return reply([]); // the prune SQL is asserted on directly, not simulated
     }
 
     // readTopPerCarrier: per-carrier ranking by score, for the fallback snapshot.

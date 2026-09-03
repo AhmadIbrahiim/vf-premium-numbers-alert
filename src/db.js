@@ -158,37 +158,53 @@ export async function writeMeta(key, value, opts = {}) {
 }
 
 /**
- * Append this run's NEW/GONE events, then trim to the most recent `keep`.
- * @param {object} p - { newMsisdns, disappearedMsisdns, today, ts, scoreMap, carrierMap, keep }
+ * Append this run's NEW/GONE events, then trim to the most recent `keepPolls` polls.
+ *
+ * Two things this gets right that a flat row cap did not:
+ *
+ *  - **Keeps the notable events, not the first ones.** Each type is sorted by score and
+ *    truncated, so "what became available" surfaces numbers worth looking at. A slice of
+ *    the raw arrays took whatever order the diff produced and was biased toward NEW,
+ *    since those were concatenated first.
+ *  - **Prunes by poll, not by row.** One churny poll produced 1,916 gone events, which
+ *    under a 2,000-row global cap would erase every earlier poll. History is now
+ *    bounded in polls, so a single bad day cannot wipe the timeline.
+ *
+ * @param {object} p - { newMsisdns, disappearedMsisdns, today, ts, scoreMap, carrierMap,
+ *   perType, keepPolls }
  */
-export async function recordNumberEvents({ newMsisdns = [], disappearedMsisdns = [], today, ts, scoreMap = new Map(), carrierMap = new Map(), keep = 2000 }, opts = {}) {
+export async function recordNumberEvents(
+  { newMsisdns = [], disappearedMsisdns = [], today, ts, scoreMap = new Map(), carrierMap = new Map(), perType = 150, keepPolls = 48 },
+  opts = {}
+) {
+  const scoreOf = (m) => scoreMap.get(m)?.score ?? 0;
+  const pick = (list) => [...list].sort((a, b) => scoreOf(b) - scoreOf(a)).slice(0, perType);
+
   const entries = [
-    ...newMsisdns.map((m) => ["new", m]),
-    ...disappearedMsisdns.map((m) => ["gone", m]),
+    ...pick(newMsisdns).map((m) => ["new", m]),
+    ...pick(disappearedMsisdns).map((m) => ["gone", m]),
   ];
+
   if (entries.length) {
-    // Cap what one run can append, so a re-baseline cannot write 100k events.
-    const capped = entries.slice(0, keep);
     await sql(
       `insert into number_events (ts, day, type, msisdn, carrier, score)
        select $1::timestamptz, $2::date, * from unnest($3::text[], $4::text[], $5::text[], $6::int[])`,
       [
         ts || new Date().toISOString(),
         today,
-        capped.map(([type]) => type),
-        capped.map(([, m]) => m),
-        capped.map(([, m]) => carrierMap.get(m) || ""),
-        capped.map(([, m]) => scoreMap.get(m)?.score ?? 0),
+        entries.map(([type]) => type),
+        entries.map(([, m]) => m),
+        entries.map(([, m]) => carrierMap.get(m) || ""),
+        entries.map(([, m]) => scoreOf(m)),
       ],
       opts
     );
   }
+
   await sql(
-    `delete from number_events where id in (
-       select id from (select id, row_number() over (order by ts desc, id desc) rn from number_events) t
-       where rn > $1
-     )`,
-    [keep],
+    `delete from number_events
+     where ts not in (select ts from (select distinct ts from number_events order by ts desc limit $1) keep)`,
+    [keepPolls],
     opts
   );
 }

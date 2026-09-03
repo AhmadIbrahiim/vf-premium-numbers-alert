@@ -2,8 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   ETISALAT_POOLS, tierBonus,
-  weGradeSlug, WE_GRADE_MIN, WE_GRADE_MAX, WE_PAGE_SIZE, WE_MAX_PAGES,
-} from "../src/config.js";
+  weGradeSlug, WE_GRADE_MIN, WE_GRADE_MAX, WE_PAGE_SIZE, WE_MAX_PAGES, carrierFromMsisdn } from "../src/config.js";
 
 test("ETISALAT_POOLS maps the five pools to tiers and bonuses", () => {
   assert.deepEqual(
@@ -41,4 +40,13 @@ test("WE grade bounds are valid positive integers (env-independent)", () => {
     assert.ok(Number.isInteger(v) && v >= 1, `expected positive integer, got ${v}`);
   }
   assert.ok(WE_GRADE_MIN <= WE_GRADE_MAX, "WE_GRADE_MIN must be <= WE_GRADE_MAX");
+});
+
+test("carrierFromMsisdn maps every Egyptian prefix", () => {
+  assert.equal(carrierFromMsisdn("01055455833"), "vodafone");
+  assert.equal(carrierFromMsisdn("01101173349"), "etisalat");
+  assert.equal(carrierFromMsisdn("01508765438"), "we");
+  assert.equal(carrierFromMsisdn("01298765432"), "orange");
+  assert.equal(carrierFromMsisdn("01399999999"), "");
+  assert.equal(carrierFromMsisdn(null), "");
 });

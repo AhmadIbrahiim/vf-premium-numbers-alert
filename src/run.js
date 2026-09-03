@@ -12,8 +12,8 @@ import { sendPremiumEmail } from "./email.js";
 import {
   MODEL, LLM_BASE_URL, LLM_API_KEY, GITHUB_TOKEN, REPO, DASHBOARD_URL,
   CANDIDATE_COUNT, BEST_COUNT, ALERT_THRESHOLD,
-  HISTORY_KEEP_DAYS, CARRIER_SHRINK_TOLERANCE, PROVIDER_RUNS_KEEP, EVENTS_KEEP,
-  todayInTz, tierBonus,
+  HISTORY_KEEP_DAYS, CARRIER_SHRINK_TOLERANCE, PROVIDER_RUNS_KEEP, EVENTS_PER_POLL, EVENTS_KEEP_POLLS,
+  todayInTz, tierBonus, carrierFromMsisdn,
 } from "./config.js";
 
 /** Stable signature of the *meaningful* state, so we only commit on real change. */
@@ -185,10 +185,22 @@ export async function run({ fetchImpl, dbFetch } = {}) {
 
   // 7. housekeeping. Nothing is published: the dashboard is a Next app that queries
   // these tables itself, so there is no snapshot that could go stale.
+  // A number that just disappeared is absent from this run's fetch, so scoreMap and
+  // carrierMap have no entry for it — every departure was logging as carrier "" and
+  // score 0, which made the change timeline unreadable. Score is a pure function of the
+  // digits and the carrier is fixed by the prefix, so both are recoverable here.
+  const eventScores = new Map(scoreMap);
+  const eventCarriers = new Map(carrierMap);
+  for (const m of diff.disappearedMsisdns) {
+    if (!eventScores.has(m)) eventScores.set(m, { score: scoreMsisdn(m).score, tags: [] });
+    if (!eventCarriers.has(m)) eventCarriers.set(m, carrierFromMsisdn(m));
+  }
+
   await db.recordNumberEvents({
     newMsisdns: diff.isBaseline ? [] : diff.newMsisdns,
     disappearedMsisdns: diff.disappearedMsisdns,
-    today, ts: generatedAt, scoreMap, carrierMap, keep: EVENTS_KEEP,
+    today, ts: generatedAt, scoreMap: eventScores, carrierMap: eventCarriers,
+    perType: EVENTS_PER_POLL, keepPolls: EVENTS_KEEP_POLLS,
   }, dbOpts);
   const pruned = await db.pruneGone({ keepDays: HISTORY_KEEP_DAYS, today }, dbOpts);
   const counts = await db.readCounts(dbOpts);

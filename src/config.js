@@ -67,8 +67,13 @@ export const BEST_COUNT = Number(process.env.BEST_COUNT || 30);
 
 /** Poll history kept per carrier for the provider status dashboard. */
 export const PROVIDER_RUNS_KEEP = intEnv("PROVIDER_RUNS_KEEP", 500);
-/** NEW/GONE events kept for the dashboard's change timeline. */
-export const EVENTS_KEEP = intEnv("EVENTS_KEEP", 2000);
+/**
+ * Change-timeline retention. Bounded in POLLS, and per poll the highest-scoring events
+ * of each type are kept — a flat row cap let one churny poll (1,916 gone at once) erase
+ * the entire history, and kept arbitrary numbers rather than notable ones.
+ */
+export const EVENTS_PER_POLL = intEnv("EVENTS_PER_POLL", 150);
+export const EVENTS_KEEP_POLLS = intEnv("EVENTS_KEEP_POLLS", 48);
 
 
 /** Delete rows gone for longer than this, so the table doesn't grow without bound. */
@@ -112,6 +117,22 @@ export const DASHBOARD_URL = process.env.DASHBOARD_URL || "";
 
 /** Timezone for first_seen / last_seen / age calculations. */
 export const TZ = "Africa/Cairo";
+
+/**
+ * Which carrier owns an msisdn, from its prefix alone.
+ *
+ * Needed for numbers that have just disappeared: they are absent from the run's fetched
+ * records, so the per-run carrier map has no entry and they were being logged with a
+ * blank carrier. The prefix is assigned by the regulator, so this is exact.
+ */
+export function carrierFromMsisdn(msisdn) {
+  const p = String(msisdn ?? "").slice(0, 3);
+  if (p === "010") return "vodafone";
+  if (p === "011") return "etisalat";
+  if (p === "015") return "we";
+  if (p === "012") return "orange";
+  return "";
+}
 
 /** Today's date as YYYY-MM-DD in the configured timezone. */
 export function todayInTz(date = new Date()) {

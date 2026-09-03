@@ -45,10 +45,16 @@ export default function RootLayout({ children }) {
                 Numbers
               </Link>
               <Link
+                href="/changes"
+                className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-600 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+              >
+                Changes
+              </Link>
+              <Link
                 href="/status"
                 className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-600 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
               >
-                Provider status
+                Providers
               </Link>
             </nav>
             <ThemeToggle />

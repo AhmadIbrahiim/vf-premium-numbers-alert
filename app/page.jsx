@@ -42,25 +42,35 @@ export default async function Home() {
 
   return (
     <main>
-      <section className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 dark:border-white/5 dark:bg-ink-850">
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500">Available now</div>
-          <div className="num-tnum mt-1 text-2xl font-bold">{formatInt(counts.available_total)}</div>
+      {/*
+        One headline plus inline carrier counts, replacing four equal-weight stat boxes.
+        Three of those boxes were carrier totals, which duplicated the carrier filter
+        directly below them and gave the page nothing to lead with.
+      */}
+      <header className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div>
+          <h1 className="num-tnum text-[32px] font-bold leading-none tracking-tight sm:text-[38px]">
+            {formatInt(counts.available_total)}
+          </h1>
+          <p className="mt-1.5 text-[13px] text-zinc-500 dark:text-zinc-400">
+            premium numbers available across Vodafone, Etisalat and WE
+          </p>
         </div>
-        {(counts.per_carrier || []).map((c) => (
-          <div
-            key={c.carrier}
-            className="rounded-xl border border-zinc-200 bg-white px-4 py-3 dark:border-white/5 dark:bg-ink-850"
-          >
-            <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-zinc-500">
-              <span className={`h-2 w-2 rounded-full ${CARRIER_DOT[c.carrier] || "bg-zinc-400"}`} />
-              {CARRIER_LABEL[c.carrier] || c.carrier}
+        <dl className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          {(counts.per_carrier || []).map((c) => (
+            <div key={c.carrier} className="flex items-center gap-2">
+              <span
+                aria-hidden="true"
+                className={`h-1.5 w-1.5 rounded-full ${CARRIER_DOT[c.carrier] || "bg-zinc-400"}`}
+              />
+              <dt className="text-[12px] text-zinc-500 dark:text-zinc-400">
+                {CARRIER_LABEL[c.carrier] || c.carrier}
+              </dt>
+              <dd className="num-tnum text-[13px] font-semibold">{formatInt(c.available)}</dd>
             </div>
-            <div className="num-tnum mt-1 text-2xl font-bold">{formatInt(c.available)}</div>
-            <div className="text-[11px] text-zinc-400">top score {c.top_score ?? 0}</div>
-          </div>
-        ))}
-      </section>
+          ))}
+        </dl>
+      </header>
 
       <NumbersBrowser initialRows={numbers.rows} initialTotal={numbers.total} />
     </main>

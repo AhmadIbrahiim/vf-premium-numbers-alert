@@ -133,6 +133,57 @@ gh-pages step. **Going to a server-rendered app first would have skipped both de
   `wrangler`, no `CLOUDFLARE_API_TOKEN`. Test writeability with a cheap write before
   building on it.
 
+## Scoring is calibrated to real inventory, not to 0-100
+
+The scale is 0-100 but the best number in the catalogue scores **56**, and only ~170 of
+202k clear 50. Anything keyed to the nominal range is wrong here:
+
+- `ALERT_THRESHOLD` was 90 and could never fire (now 50).
+- Score-tier words and the score ring both had bands wide enough that every row in a
+  best-first list read "Exceptional". Bands are cut against the distribution instead.
+
+**Ladders only score on steps a human perceives.** `pairLadder` used to reward any
+arithmetic step between the four two-digit groups, so `01101173349` (01·17·33·49, step
+16 — invisible) scored 59 and topped the list while `01555656789`, which contains a
+plainly readable 656789, scored 28. Pairs now accept ±1, ±5, ±10, ±11 only; digit
+ladders ±2 only; a 3-long step-2 run scores nothing. Weights put dictatability first: a
+consecutive run beats a step-2 ladder of the same length, and a test pins that ordering.
+
+**What the catalogue does not contain:** no numbers with 4+ repeated digits, 4+ trailing
+zeros, or a repeated ABABAB block. Those sell through dealers, not public eSIM
+catalogues. So the 56 ceiling is real inventory, and the scorer's only job is ranking
+subtle differences well.
+
+**best_grade is maintained with `greatest()`**, so recalibrating the scorer does not
+lower it. After any scoring change, reset it or the old inflated values stay frozen in
+and the fix is invisible in every best_grade-ordered view.
+
+## The dashboard shows human language, never tags
+
+Scorer tags are engineering identifiers (`ascending-run-x4`, `etisalat-platinum_plus`,
+`ladder-step-2-x5`). They were rendered raw as pills, which read as debug output — a
+buyer cannot tell whether `ladder-step-2-x5` is good. `patternLabel` in `lib/format.js`
+maps them to plain phrases ("4 in a row up", "ends in 4 zeros") and returns null for
+tags not worth surfacing. Add a mapping there whenever the scorer gains a tag.
+
+The number is the hero: largest element, only monospace, one per row. Carrier is a 3px
+edge stripe rather than a pill. There is no podium — it spent ~350px showing #1/#2/#3,
+which are usually near-identical because carriers list numbers in blocks
+(0110 123 2101 / 2102 / 2103, all 56).
+
+## Change events: what arrived and what went
+
+`/changes` groups `number_events` by poll. Two things that were wrong and are easy to
+reintroduce:
+
+- **Departed numbers are absent from the run's fetch**, so `scoreMap` and `carrierMap`
+  have no entry and every departure logged as carrier `""` and score 0, which made the
+  page unreadable. Score is a pure function of the digits and the carrier is fixed by
+  the prefix (`carrierFromMsisdn`), so run.js recovers both before recording.
+- **Retention is bounded in polls, not rows,** and keeps the highest-scoring events of
+  each type per poll. A flat 2,000-row cap let one churny poll (1,916 gone at once)
+  erase the whole timeline, and kept arbitrary numbers rather than notable ones.
+
 ## GitHub Models is dead — the LLM provider is now configuration
 
 **GitHub retired GitHub Models on 2026-07-30.** The endpoint answers HTTP 410
