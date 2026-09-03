@@ -117,8 +117,25 @@ test("defensive cases return {score:0, tags:[]}", () => {
 
 test("arithmetic ladder with step 2 scores via ladder tag", () => {
   const { score, tags } = scoreMsisdn("01213579753"); // sub 13579753 -> 1,3,5,7,9 step2
-  assert.ok(score >= 40, `expected >=40, got ${score}`);
+  // Threshold lowered from 40 when the ladders were recalibrated: a step-2 run has to
+  // sit below the consecutive run of the same length (see the ordering test below).
+  assert.ok(score >= 25, `expected >=25, got ${score}`);
   assert.ok(tags.some((t) => t.startsWith("ladder-step")), `tags: ${tags}`);
+});
+
+test("a consecutive run beats a step-2 ladder of the same length", () => {
+  // 56789 is easier to say than 13579, so it must score higher. The old weights had
+  // this backwards (28 against 50), which is why step-2 ladders filled the top.
+  const consecutive = scoreMsisdn("01015678923"); // 5,6,7,8,9
+  const stepTwo = scoreMsisdn("01013579246"); // 1,3,5,7,9
+  const runTag = consecutive.tags.find((t) => /-run-x5/.test(t));
+  const ladderTag = stepTwo.tags.find((t) => /ladder-step-?2-x5/.test(t));
+  assert.ok(runTag, `expected a 5-run tag, got: ${consecutive.tags}`);
+  assert.ok(ladderTag, `expected a step-2 x5 tag, got: ${stepTwo.tags}`);
+  assert.ok(
+    consecutive.score > stepTwo.score,
+    `consecutive (${consecutive.score}) must beat step-2 (${stepTwo.score})`
+  );
 });
 
 test("pair ladder 01 02 03 04 detected", () => {
@@ -147,4 +164,51 @@ test("memorable ladder outscores a plain number", () => {
   const ladder = scoreMsisdn("01213579753").score;
   const plain = scoreMsisdn("01055455833").score;
   assert.ok(ladder > plain, `ladder ${ladder} should beat plain ${plain}`);
+});
+
+/* --- ladders must only fire on steps a human can actually see --- */
+
+test("a pair ladder with an imperceptible step scores nothing for it", () => {
+  // 01·17·33·49 is arithmetic with step 16 — technically a sequence, visually noise.
+  // This was the single biggest scoring defect: it put random numbers at the top of
+  // the list, ahead of genuinely memorable ones.
+  for (const m of ["01101173349", "01101183552", "01101193755"]) {
+    const { tags } = scoreMsisdn(m);
+    assert.ok(!tags.includes("pair-ladder"), `${m} must not count as a pair ladder`);
+    assert.ok(!tags.includes("pair-ladder-partial"), `${m} must not count as a partial pair ladder`);
+  }
+});
+
+test("a pair ladder with a perceptible step still scores", () => {
+  // These are the patterns the heuristic was written for and they must survive.
+  for (const m of ["01001020304", "01010203040", "01011223344"]) {
+    const { tags } = scoreMsisdn(m);
+    assert.ok(
+      tags.some((t) => t.startsWith("pair-ladder")),
+      `${m} should read as a pair ladder`
+    );
+  }
+});
+
+test("a visible ascending run outranks an invisible arithmetic ladder", () => {
+  // 656789 is a run anyone would notice; 01·17·33·49 is not. The old weights had
+  // this backwards, 28 against 59.
+  const visible = scoreMsisdn("01555656789");
+  const noise = scoreMsisdn("01101173349");
+  assert.ok(
+    visible.score > noise.score,
+    `01555656789 (${visible.score}) must outrank 01101173349 (${noise.score})`
+  );
+});
+
+test("digit ladders only count for steps of 2, not arbitrary ones", () => {
+  // Step 2 (13579, 24680) reads as counting. Step 3+ does not.
+  assert.ok(scoreMsisdn("01013579135").tags.some((t) => /ladder-step-?2/.test(t)));
+  for (const m of ["01014703692", "01011593705"]) {
+    const { tags } = scoreMsisdn(m);
+    assert.ok(
+      !tags.some((t) => /ladder-step-?[3-9]/.test(t)),
+      `${m} must not score a step-3+ ladder`
+    );
+  }
 });

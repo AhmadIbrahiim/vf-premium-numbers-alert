@@ -124,8 +124,19 @@ function longestArithRun(d) {
 }
 
 /**
- * Treat the 8 digits as four two-digit groups (e.g. 01 02 03 04) and report
- * how many leading groups form an arithmetic sequence with a non-zero step.
+ * Steps between two-digit groups that a person actually perceives as a sequence.
+ *
+ * 01 02 03 04 (1), 10 20 30 40 (10), 11 22 33 44 (11) and 55 60 65 70 (5) all read as
+ * patterns. An arbitrary step does not: 01 17 33 49 is arithmetic with step 16 and
+ * completely invisible. Accepting any step made the scorer rank random numbers above
+ * genuinely memorable ones — it put 01101173349 at the top of the list, ahead of
+ * 01555656789, which contains a plainly visible 656789.
+ */
+const PERCEPTIBLE_PAIR_STEPS = new Set([1, 5, 10, 11]);
+
+/**
+ * Treat the 8 digits as four two-digit groups (e.g. 01 02 03 04) and report how many
+ * leading groups form an arithmetic sequence with a step a human would notice.
  * @returns {{count:number, step:number}}  count in 1..4
  */
 function pairLadder(d) {
@@ -137,6 +148,7 @@ function pairLadder(d) {
   ];
   const step = pairs[1] - pairs[0];
   if (step === 0) return { count: 1, step: 0 };
+  if (!PERCEPTIBLE_PAIR_STEPS.has(Math.abs(step))) return { count: 1, step };
   let count = 2;
   for (let i = 2; i < 4; i++) {
     if (pairs[i] - pairs[i - 1] === step) count += 1;
@@ -198,7 +210,7 @@ export function scoreMsisdn(msisdn) {
     score += 30;
     tags.push(`repeated-digit-x${sameRun}`);
   } else if (sameRun === 3) {
-    score += 12;
+    score += 20;
     tags.push("triple-digit");
   }
 
@@ -209,14 +221,14 @@ export function scoreMsisdn(msisdn) {
     score += 85;
     tags.push("ascending");
   } else if (asc >= 4) {
-    score += (asc - 3) * 14; // 4->14, 5->28, 6->42, 7->56
+    score += (asc - 3) * 18; // 4->18, 5->36, 6->54, 7->72
     tags.push(`ascending-run-x${asc}`);
   }
   if (desc === 8) {
     score += 85;
     tags.push("descending");
   } else if (desc >= 4) {
-    score += (desc - 3) * 14;
+    score += (desc - 3) * 18;
     tags.push(`descending-run-x${desc}`);
   }
 
@@ -331,32 +343,33 @@ export function scoreMsisdn(msisdn) {
     tags.push("ladder");
   }
 
-  // --- arithmetic ladders with ANY constant step >= 2 (e.g. 2468, 13579, 9753) ---
-  // (steps of 0 = all-same and +/-1 = asc/desc are scored above; skip those here.)
+  // --- arithmetic ladders, step 2 only (2468, 13579, 9753) ---
+  // Steps of 0 (all-same) and +/-1 (asc/desc) are scored above. Larger steps are not
+  // perceptible: 147036 and 159370 are arithmetic but read as random, and rewarding
+  // them was a large part of why the top of the list looked arbitrary.
   const arith = longestArithRun(digits);
-  if (Math.abs(arith.step) >= 2) {
+  if (Math.abs(arith.step) === 2) {
     if (arith.len === 8) {
-      score += 80;
+      score += 62;
       tags.push(`ladder-step${arith.step}`);
     } else if (arith.len >= 5) {
-      score += 50;
+      score += 30;
       tags.push(`ladder-step${arith.step}-x${arith.len}`);
     } else if (arith.len === 4) {
-      score += 30;
+      score += 16;
       tags.push(`ladder-step${arith.step}-x4`);
-    } else if (arith.len === 3) {
-      score += 10;
-      tags.push(`ladder-step${arith.step}-x3`);
     }
+    // A 3-long step-2 run (135, 246) is not a pattern anyone notices; scoring it
+    // filled the top of the list with numbers that look random.
   }
 
   // --- pair ladders: groups like 01 02 03 04 or 10 20 30 40 ---
   const pl = pairLadder(digits);
   if (pl.count === 4) {
-    score += 55;
+    score += 50;
     tags.push("pair-ladder");
   } else if (pl.count === 3) {
-    score += 25;
+    score += 12;
     tags.push("pair-ladder-partial");
   }
 
