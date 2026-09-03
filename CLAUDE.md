@@ -278,6 +278,13 @@ chunks and interferes with hot reload. `components/service-worker.jsx` unregiste
 instead, because a worker installed once keeps controlling localhost across every later
 dev session. If localhost behaves impossibly, check for a leftover worker first.
 
+`app/favicon.ico` is a real multi-size ICO (48/32/16) built from `public/icon-512.png`
+with `magick ... -define icon:auto-resize=48,32,16`, so the tab icon is the same artwork
+as the installed app. It matters because **browsers request `/favicon.ico` unprompted
+whether or not anything links to it**, so its absence was a 404 on every first visit
+even with `app/icon.svg` present. Regenerate it from the 512px source, never by renaming
+a PNG — a mislabelled file serves a 200 and then fails to decode.
+
 Icon rules that fail *silently* — the browser just never offers to install, with no error
 anywhere: a 192px **and** a 512px icon are both required, and maskable icons must be
 separate entries from `purpose: "any"` ones (Android crops maskable icons to the device

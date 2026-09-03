@@ -76,6 +76,27 @@ test("the icons are real PNGs, not SVGs with a .png name", async () => {
   }
 });
 
+test("a real multi-size favicon.ico exists", async () => {
+  // Browsers request /favicon.ico unprompted whether or not anything links to it, so
+  // its absence is a 404 on every first visit. Next serves app/favicon.ico at that
+  // path by convention.
+  const buf = await readFile(root("app/favicon.ico"));
+  // ICONDIR: reserved 0, type 1 (icon), then the image count.
+  assert.equal(buf.readUInt16LE(0), 0, "not an ICO: reserved field is not 0");
+  assert.equal(buf.readUInt16LE(2), 1, "not an ICO: type is not 1");
+  const count = buf.readUInt16LE(4);
+  assert.ok(count >= 2, `expected several sizes to choose from, got ${count}`);
+
+  // Each 16-byte directory entry starts with width and height, where 0 means 256.
+  const sizes = [];
+  for (let i = 0; i < count; i++) {
+    const off = 6 + i * 16;
+    sizes.push(buf[off] || 256);
+  }
+  assert.ok(sizes.includes(16), `missing a 16px entry, have: ${sizes}`);
+  assert.ok(sizes.includes(32), `missing a 32px entry, have: ${sizes}`);
+});
+
 test("the apple-touch-icon exists at 180x180", async () => {
   // iOS ignores the manifest entirely and uses this file.
   const buf = await readFile(root("public/apple-touch-icon.png"));
