@@ -26,7 +26,7 @@ const BADGE = {
   live: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
   carried: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
   failing: "bg-red-500/15 text-red-600 dark:text-red-400",
-  idle: "bg-zinc-400/15 text-zinc-500",
+  idle: "bg-zinc-400/15 text-zinc-500 dark:text-zinc-400",
 };
 
 /** A carrier's state, from its most recent poll. */
@@ -77,7 +77,7 @@ export default async function StatusPage() {
         <h1 className="text-xl font-bold">Provider status</h1>
         <div className="mt-4 rounded-2xl border border-dashed border-zinc-300 bg-white/60 px-5 py-10 text-center dark:border-white/10 dark:bg-ink-900/50">
           <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">No polls recorded yet</p>
-          <p className="mt-1 text-xs text-zinc-500">The next scheduled poll will fill this in.</p>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">The next scheduled poll will fill this in.</p>
         </div>
       </main>
     );
@@ -96,14 +96,14 @@ export default async function StatusPage() {
   return (
     <main>
       <h1 className="text-xl font-bold">Provider status</h1>
-      <p className="mb-5 mt-1 text-[13px] text-zinc-500">
+      <p className="mb-5 mt-1 text-[13px] text-zinc-500 dark:text-zinc-400">
         Read live from Postgres · last poll {latestPoll ? relTime(latestPoll.run_at) : "unknown"}
       </p>
 
       <section className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {summary.map(([k, v]) => (
           <div key={k} className="rounded-xl border border-zinc-200 bg-white px-4 py-3 dark:border-white/5 dark:bg-ink-850">
-            <div className="text-[11px] uppercase tracking-wide text-zinc-500">{k}</div>
+            <div className="text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{k}</div>
             {/* text-2xl wrapped "47 min ago" onto two lines on a phone. */}
             <div className="num-tnum mt-1 text-xl font-bold sm:text-2xl">{v}</div>
           </div>
@@ -144,7 +144,7 @@ export default async function StatusPage() {
                   ["Succeeded", `${okCount} of last ${list.length}`],
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between gap-3">
-                    <dt className="text-zinc-500">{k}</dt>
+                    <dt className="text-zinc-500 dark:text-zinc-400">{k}</dt>
                     <dd className="num-tnum font-semibold">{v}</dd>
                   </div>
                 ))}
@@ -153,7 +153,7 @@ export default async function StatusPage() {
               {series.length > 1 ? (
                 <>
                   <Sparkline values={series} stroke={CARRIER_STROKE[carrier] || "#888"} />
-                  <p className="mt-1 text-[11px] text-zinc-500">
+                  <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                     Numbers collected over the last {series.length} successful polls
                   </p>
                 </>
@@ -169,11 +169,11 @@ export default async function StatusPage() {
         })}
       </section>
 
-      <h3 className="mb-2.5 mt-8 text-[13px] font-semibold uppercase tracking-wide text-zinc-500">Recent polls</h3>
+      <h3 className="mb-2.5 mt-8 text-[13px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Recent polls</h3>
       <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-white/5 dark:bg-ink-900/60">
         <table className="w-full min-w-[620px] border-collapse text-[13px]">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-zinc-500">
+            <tr className="text-left text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
               <th className="border-b border-zinc-200 px-3.5 py-2.5 font-semibold dark:border-white/5">When</th>
               <th className="border-b border-zinc-200 px-3.5 py-2.5 font-semibold dark:border-white/5">Provider</th>
               <th className="border-b border-zinc-200 px-3.5 py-2.5 font-semibold dark:border-white/5">Result</th>
@@ -215,7 +215,7 @@ export default async function StatusPage() {
         </table>
       </div>
 
-      <p className="mt-6 text-[12px] text-zinc-500">
+      <p className="mt-6 text-[12px] text-zinc-500 dark:text-zinc-400">
         &ldquo;Carried over&rdquo; means the provider answered but with too little to trust, so its numbers were
         refreshed and none were retired.
       </p>

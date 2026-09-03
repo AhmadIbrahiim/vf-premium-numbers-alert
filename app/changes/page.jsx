@@ -41,7 +41,7 @@ function EventRow({ e }) {
         {CARRIER_LABEL[e.carrier] || e.carrier}
       </span>
       <span className={`ml-auto shrink-0 text-[12px] font-semibold ${tier.tone}`}>{tier.label}</span>
-      <span className="num-tnum w-7 shrink-0 text-right text-[11px] text-zinc-400 dark:text-zinc-600">
+      <span className="num-tnum w-7 shrink-0 text-right text-[11px] text-zinc-500 dark:text-zinc-400">
         {e.score}
       </span>
     </li>
@@ -90,7 +90,7 @@ export default async function ChangesPage() {
           <p className="text-[13px] font-semibold text-zinc-700 dark:text-zinc-300">
             No changes recorded yet
           </p>
-          <p className="mt-1 text-[12px] text-zinc-500">
+          <p className="mt-1 text-[12px] text-zinc-500 dark:text-zinc-400">
             The next poll will record what arrived and what went.
           </p>
         </div>
@@ -116,12 +116,12 @@ export default async function ChangesPage() {
             key={String(poll.ts)}
             className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-white/[0.08] dark:bg-white/[0.02]"
           >
-            <h2 className="mb-3 flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.1em] text-zinc-400 dark:text-zinc-500">
+            <h2 className="mb-3 flex flex-wrap items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.1em] text-zinc-500 dark:text-zinc-400">
               {relTime(poll.ts)}
               <span className="rounded bg-emerald-500/15 px-1.5 py-px text-[10px] font-bold tracking-wider text-emerald-700 dark:text-emerald-400">
                 +{poll.arrived.length}
               </span>
-              <span className="rounded bg-zinc-400/15 px-1.5 py-px text-[10px] font-bold tracking-wider text-zinc-500">
+              <span className="rounded bg-zinc-400/15 px-1.5 py-px text-[10px] font-bold tracking-wider text-zinc-500 dark:text-zinc-400">
                 −{poll.left.length}
               </span>
             </h2>
@@ -138,17 +138,17 @@ export default async function ChangesPage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="py-1.5 text-[12px] text-zinc-400">Nothing new</p>
+                  <p className="py-1.5 text-[12px] text-zinc-500 dark:text-zinc-400">Nothing new</p>
                 )}
                 {poll.arrived.length > 12 ? (
-                  <p className="pt-1.5 text-[11px] text-zinc-400">
+                  <p className="pt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
                     and {formatInt(poll.arrived.length - 12)} more
                   </p>
                 ) : null}
               </div>
 
               <div>
-                <h3 className="mb-1 text-[12px] font-semibold text-zinc-500">Went</h3>
+                <h3 className="mb-1 text-[12px] font-semibold text-zinc-500 dark:text-zinc-400">Went</h3>
                 {poll.left.length ? (
                   <ul className="divide-y divide-zinc-100 dark:divide-white/[0.06]">
                     {poll.left.slice(0, 12).map((e) => (
@@ -156,10 +156,10 @@ export default async function ChangesPage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="py-1.5 text-[12px] text-zinc-400">Nothing gone</p>
+                  <p className="py-1.5 text-[12px] text-zinc-500 dark:text-zinc-400">Nothing gone</p>
                 )}
                 {poll.left.length > 12 ? (
-                  <p className="pt-1.5 text-[11px] text-zinc-400">
+                  <p className="pt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
                     and {formatInt(poll.left.length - 12)} more
                   </p>
                 ) : null}

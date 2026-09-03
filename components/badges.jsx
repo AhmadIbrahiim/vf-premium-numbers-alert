@@ -25,7 +25,7 @@ export default function Badges({ row }) {
         <span className={`${PILL} bg-zinc-400/15 text-zinc-500 ring-zinc-400/30 dark:text-zinc-400`}>Gone</span>
       ) : null}
       {carrier ? (
-        <span className={`${PILL} ${CARRIER_CLASS[carrier] || "bg-zinc-400/15 text-zinc-500 ring-zinc-400/30"}`}>
+        <span className={`${PILL} ${CARRIER_CLASS[carrier] || "bg-zinc-400/15 text-zinc-500 dark:text-zinc-400 ring-zinc-400/30"}`}>
           {CARRIER_LABEL[carrier] || carrier}
         </span>
       ) : null}

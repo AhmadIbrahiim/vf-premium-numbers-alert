@@ -151,7 +151,7 @@ export default function NumbersBrowser({ initialRows, initialTotal }) {
         </select>
       </div>
 
-      <p className="mb-3 text-[12px] text-zinc-500" aria-live="polite">
+      <p className="mb-3 text-[12px] text-zinc-500 dark:text-zinc-400" aria-live="polite">
         {error ? (
           <span className="text-red-500">{error}</span>
         ) : (
@@ -168,7 +168,7 @@ export default function NumbersBrowser({ initialRows, initialTotal }) {
       {rows.length === 0 && !loading ? (
         <div className="rounded-lg border border-dashed border-zinc-300 px-5 py-12 text-center dark:border-white/10">
           <p className="text-[13px] font-semibold text-zinc-700 dark:text-zinc-300">No matches</p>
-          <p className="mt-1 text-[12px] text-zinc-500">
+          <p className="mt-1 text-[12px] text-zinc-500 dark:text-zinc-400">
             {searching ? "Try a different digit sequence." : "Nothing to show for this filter."}
           </p>
         </div>

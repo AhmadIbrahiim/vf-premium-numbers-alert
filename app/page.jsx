@@ -33,7 +33,7 @@ export default async function Home() {
       <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6">
         <h1 className="text-base font-semibold text-red-600 dark:text-red-400">Couldn&apos;t reach the database</h1>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">{error}</p>
-        <p className="mt-2 text-xs text-zinc-500">
+        <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
           Check that <code className="rounded bg-zinc-500/15 px-1">DATABASE_URL</code> is set for this deployment.
         </p>
       </div>

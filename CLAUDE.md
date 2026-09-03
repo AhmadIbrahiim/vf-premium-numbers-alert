@@ -344,6 +344,35 @@ full-width nav; then tabs, a full-width search, and the two selects sharing a ro
 `flex-wrap` alone orphaned the sort select on its own line and pushed the theme toggle
 onto a second row at 320px.
 
+## Colour is calibrated by measurement, in both themes
+
+The palette was originally picked against the dark ground and reused unchanged in light,
+so several things were unreadable in one theme or the other. Measured contrast ratios,
+against WCAG AA (4.5:1 for small text, 3:1 for large):
+
+| | Was | Measured | Now |
+|---|---|---|---|
+| score value, rank | `text-zinc-400 dark:text-zinc-600` | 2.56 light / 2.59 dark | `text-zinc-500 dark:text-zinc-400` |
+| secondary text on dark cards | bare `text-zinc-500` | 3.90-4.04 dark | same + `dark:text-zinc-400` |
+| tier words | `*-600 dark:*-400` | 3.09-3.77 light | `*-700 dark:*-400` |
+| Etisalat accent | `#10b981` both themes | 2.54 light | `emerald-700` in light |
+| WE accent | `#8b5cf6` both themes | 4.26 light | `violet-700` in light |
+| Vodafone accent | `#e60000` both themes | 4.13 dark | `vf-redsoft` in dark |
+
+**The rule: light theme uses the 700 step (or `zinc-500`), dark theme the 400 step, and
+every tone names both.** A tone with only a light value inherits nothing usable on the
+dark ground — which is how the score, the second most important number in every row,
+ended up at 2.59:1 in the theme the app ships in by default.
+
+`test/format.test.js` enforces exactly that (both variants present, light >= 700, dark
+<= 400) and is mutation-tested. The 0-100 `scoreStyle` helper was deleted rather than
+recoloured: nothing had imported it since the score ring was removed.
+
+The audit itself is worth rerunning after any palette change — it walks every text node,
+resolves the first opaque background actually painted behind it, and compares against
+the AA threshold for that text's size and weight. Both themes and both widths, because a
+fix in one theme is regularly a regression in the other.
+
 ## Commands
 
 ```bash

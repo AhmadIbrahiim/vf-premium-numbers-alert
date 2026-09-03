@@ -168,7 +168,7 @@ export default function InstallPrompt() {
             type="button"
             onClick={dismiss}
             aria-label="Dismiss install prompt"
-            className="-mr-1 -mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-lg text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
+            className="-mr-1 -mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-lg text-zinc-500 dark:text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-white"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 6 6 18M6 6l12 12" />
@@ -181,19 +181,19 @@ export default function InstallPrompt() {
           // than hidden behind another tap.
           <ol className="mt-3 space-y-1.5 border-t border-zinc-100 pt-3 text-[12.5px] text-zinc-600 dark:border-white/[0.06] dark:text-zinc-300">
             <li className="flex gap-2">
-              <span aria-hidden="true" className="font-semibold text-zinc-400">1.</span>
+              <span aria-hidden="true" className="font-semibold text-zinc-500 dark:text-zinc-400">1.</span>
               <span>
                 Tap the <strong className="font-semibold">Share</strong> button in the browser toolbar.
               </span>
             </li>
             <li className="flex gap-2">
-              <span aria-hidden="true" className="font-semibold text-zinc-400">2.</span>
+              <span aria-hidden="true" className="font-semibold text-zinc-500 dark:text-zinc-400">2.</span>
               <span>
                 Choose <strong className="font-semibold">Add to Home Screen</strong>.
               </span>
             </li>
             <li className="flex gap-2">
-              <span aria-hidden="true" className="font-semibold text-zinc-400">3.</span>
+              <span aria-hidden="true" className="font-semibold text-zinc-500 dark:text-zinc-400">3.</span>
               <span>
                 Tap <strong className="font-semibold">Add</strong>.
               </span>
@@ -211,7 +211,7 @@ export default function InstallPrompt() {
             <button
               type="button"
               onClick={dismiss}
-              className="min-h-[44px] rounded-xl px-4 text-[13px] font-medium text-zinc-500 transition hover:text-zinc-900 dark:hover:text-white"
+              className="min-h-[44px] rounded-xl px-4 text-[13px] font-medium text-zinc-500 dark:text-zinc-400 transition hover:text-zinc-900 dark:hover:text-white"
             >
               Not now
             </button>

@@ -11,9 +11,9 @@ import CopyButton from "./copy-button.jsx";
  */
 
 const CARRIER_ACCENT = {
-  vodafone: "text-carrier-vodafone",
-  etisalat: "text-carrier-etisalat",
-  we: "text-carrier-we",
+  vodafone: "text-carrier-vodafone dark:text-vf-redsoft",
+  etisalat: "text-emerald-700 dark:text-carrier-etisalat",
+  we: "text-violet-700 dark:text-carrier-we",
 };
 
 export default function TopPick({ row }) {
@@ -26,7 +26,7 @@ export default function TopPick({ row }) {
     <section className="mb-5 rounded-xl border border-zinc-200 bg-white p-4 dark:border-white/[0.08] dark:bg-white/[0.03] sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400 dark:text-zinc-500">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400">
             Best available now
           </p>
           {/* 34px left ~2px of slack inside the card at 320px. Stepped by width, and
@@ -56,7 +56,7 @@ export default function TopPick({ row }) {
         <div className="flex items-center gap-4">
           <div className="text-right">
             <div className={`text-[15px] font-bold leading-none ${tier.tone}`}>{tier.label}</div>
-            <div className="num-tnum mt-1 text-[11px] text-zinc-400 dark:text-zinc-600">
+            <div className="num-tnum mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
               scores {row.score}
             </div>
           </div>

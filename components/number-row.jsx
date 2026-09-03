@@ -45,7 +45,7 @@ export default function NumberRow({ row, rank }) {
       />
 
       {typeof rank === "number" ? (
-        <span className="num-tnum hidden w-6 shrink-0 text-right text-[11px] tabular-nums text-zinc-400 dark:text-zinc-600 sm:block">
+        <span className="num-tnum hidden w-6 shrink-0 text-right text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400 sm:block">
           {rank + 1}
         </span>
       ) : null}
@@ -61,7 +61,7 @@ export default function NumberRow({ row, rank }) {
             </span>
           ) : null}
           {gone ? (
-            <span className="rounded bg-zinc-400/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+            <span className="rounded bg-zinc-400/15 px-1.5 py-px text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
               Gone
             </span>
           ) : null}
@@ -92,7 +92,7 @@ export default function NumberRow({ row, rank }) {
         <div className={`whitespace-nowrap text-[12px] font-semibold leading-none sm:text-[13px] ${tier.tone}`}>
           {tier.label}
         </div>
-        <div className="num-tnum mt-1 text-[11px] text-zinc-400 dark:text-zinc-600">{row.score}</div>
+        <div className="num-tnum mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">{row.score}</div>
       </div>
 
       <CopyButton value={row.msisdn} />
