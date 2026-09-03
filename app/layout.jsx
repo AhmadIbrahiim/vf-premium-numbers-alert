@@ -2,6 +2,8 @@ import "./globals.css";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import Link from "next/link";
 import ThemeToggle from "../components/theme-toggle.jsx";
+import ServiceWorker from "../components/service-worker.jsx";
+import InstallPrompt from "../components/install-prompt.jsx";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
@@ -10,6 +12,34 @@ export const metadata = {
   title: "Egypt Premium Numbers",
   description:
     "Every premium mobile number listed by Vodafone, Etisalat and WE Egypt, scored by digit pattern and refreshed continuously.",
+  applicationName: "EG Numbers",
+  // iOS ignores the manifest for these, so they have to be declared as meta/link tags.
+  appleWebApp: {
+    capable: true,
+    title: "EG Numbers",
+    // "default" keeps the status bar legible on both themes; "black-translucent" would
+    // let content slide under the notch.
+    statusBarStyle: "default",
+  },
+  formatDetection: { telephone: false },
+  icons: {
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
+};
+
+export const viewport = {
+  // Matches the manifest theme_color so the browser UI blends with the header.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#e60000" },
+    { media: "(prefers-color-scheme: dark)", color: "#08080a" },
+  ],
+  width: "device-width",
+  initialScale: 1,
+  // Zoom is left enabled on purpose: disabling it is an accessibility failure, and the
+  // page is a list of phone numbers people will want to enlarge.
+  maximumScale: 5,
+  // Fills the safe area on notched devices when running standalone.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }) {
@@ -59,8 +89,10 @@ export default function RootLayout({ children }) {
             </nav>
             <ThemeToggle />
           </header>
+          <InstallPrompt />
           {children}
         </div>
+        <ServiceWorker />
       </body>
     </html>
   );
