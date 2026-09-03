@@ -26,8 +26,10 @@ const CARRIER_DOT = {
 
 function EventRow({ e }) {
   const tier = scoreTier(e.score);
+  // flex-wrap so the row reflows at large text sizes rather than forcing the page
+  // wider; the number itself still never breaks.
   return (
-    <li className="flex items-center gap-2 py-1.5 sm:gap-3">
+    <li className="flex flex-wrap items-center gap-2 py-1.5 sm:gap-3">
       <span
         aria-hidden="true"
         className={`h-1.5 w-1.5 shrink-0 rounded-full ${CARRIER_DOT[e.carrier] || "bg-zinc-400"}`}

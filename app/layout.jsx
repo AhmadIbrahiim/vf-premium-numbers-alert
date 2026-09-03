@@ -68,8 +68,11 @@ export default function RootLayout({ children }) {
               <span className="text-[15px] font-bold tracking-tight">Premium Numbers</span>
             </Link>
             {/* order-last + w-full puts the nav on its own row on a phone; from sm: it
-                returns to sitting between the logo and the theme toggle. */}
-            <nav className="order-last flex w-full items-center gap-1 rounded-xl border border-zinc-200 bg-white p-1 dark:border-white/5 dark:bg-ink-850 sm:order-none sm:ml-auto sm:w-auto sm:gap-1.5">
+                returns to sitting between the logo and the theme toggle. flex-wrap
+                matters at large text sizes: three non-wrapping flex-1 links forced the
+                page 195px wider than a 375px viewport at 200% text. */}
+            <nav
+              className="order-last flex w-full flex-wrap items-center gap-1 rounded-xl border border-zinc-200 bg-white p-1 dark:border-white/5 dark:bg-ink-850 sm:order-none sm:ml-auto sm:w-auto sm:gap-1.5">
               <Link
                 href="/"
                 className="grid min-h-[44px] flex-1 place-items-center rounded-lg px-3 text-sm font-medium text-zinc-600 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white sm:min-h-0 sm:flex-none sm:py-1.5"

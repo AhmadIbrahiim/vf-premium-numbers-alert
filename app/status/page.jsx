@@ -105,7 +105,9 @@ export default async function StatusPage() {
           <div key={k} className="rounded-xl border border-zinc-200 bg-white px-4 py-3 dark:border-white/5 dark:bg-ink-850">
             <div className="text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{k}</div>
             {/* text-2xl wrapped "47 min ago" onto two lines on a phone. */}
-            <div className="num-tnum mt-1 text-xl font-bold sm:text-2xl">{v}</div>
+            {/* overflow-wrap so a long figure folds at 200% text instead of
+                overflowing the card — digits have no natural break opportunity. */}
+            <div className="num-tnum mt-1 text-xl font-bold [overflow-wrap:anywhere] sm:text-2xl">{v}</div>
           </div>
         ))}
       </section>

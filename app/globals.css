@@ -4,6 +4,20 @@
 
 html { scroll-behavior: smooth; }
 
+/*
+ * Honour the OS "reduce motion" setting. Smooth scrolling is motion too, and it was
+ * still applied with the setting on. Transitions are near-zeroed rather than removed
+ * so state changes still land, just instantly.
+ */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 body {
   background:
     radial-gradient(1000px 520px at 80% -10%, rgba(230, 0, 0, .08), transparent 60%),

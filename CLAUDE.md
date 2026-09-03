@@ -373,6 +373,27 @@ resolves the first opaque background actually painted behind it, and compares ag
 the AA threshold for that text's size and weight. Both themes and both widths, because a
 fix in one theme is regularly a regression in the other.
 
+### The rest of the visual pass: motion, text zoom, ARIA
+
+- **`prefers-reduced-motion` is honoured** in `globals.css`. It was not, and
+  `scroll-behavior: smooth` is motion — it stayed smooth with the OS setting on.
+- **Text at 200% must not scroll the page sideways** (WCAG 1.4.4). Three separate
+  things broke it, all "cannot shrink, will not wrap":
+  the nav's three `flex-1` links forced the document to 570px at a 375px viewport;
+  a `/changes` event row (nowrap number + tier + score) needed 339px in a 245px column;
+  and a `/status` stat figure overflowed its card by 88px, because tabular digits have
+  no natural break opportunity — it needs `overflow-wrap: anywhere` to fold after the
+  comma. Check zoom by setting `documentElement.style.fontSize = "32px"`, not by
+  changing the viewport: they fail differently.
+- **The view switcher is a `role="group"` of `aria-pressed` buttons, not tabs.** It was
+  `role="tablist"`/`role="tab"` with `aria-selected`, which promises a tabpanel a screen
+  reader can move to. There is no panel — the same list is refiltered in place.
+
+**Focus was fine and needed no change.** Worth recording because it looks like a gap:
+only the search box defines a `focus-visible` style, but the browser's default ring
+shows on all interactive elements, verified by tabbing through them and reading computed
+`outline`. Don't add a custom ring on the assumption it is missing.
+
 ## Commands
 
 ```bash

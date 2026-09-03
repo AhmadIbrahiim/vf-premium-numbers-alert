@@ -102,14 +102,23 @@ export default function NumbersBrowser({ initialRows, initialTotal }) {
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        {/* Phone order: tabs, search, then the two selects side by side. */}
-        <div role="tablist" className="flex w-full items-center gap-0.5 rounded-lg border border-zinc-200 p-1 dark:border-white/10 sm:w-auto sm:rounded-md sm:p-0.5">
+        {/* Phone order: view toggle, search, then the two selects side by side. */}
+        {/*
+          These are filter toggles, not tabs. role="tablist"/"tab" with aria-selected
+          promises a tabpanel that a screen reader can move to, and there is no panel
+          here — the same list is refiltered in place. A labelled group of pressed
+          buttons is what this actually is.
+        */}
+        <div
+          role="group"
+          aria-label="Availability"
+          className="flex w-full items-center gap-0.5 rounded-lg border border-zinc-200 p-1 dark:border-white/10 sm:w-auto sm:rounded-md sm:p-0.5"
+        >
           {VIEWS.map((v) => (
             <button
               key={v.id}
-              role="tab"
               type="button"
-              aria-selected={view === v.id}
+              aria-pressed={view === v.id}
               onClick={() => setView(v.id)}
               className={`min-h-[44px] flex-1 rounded-md px-2.5 text-[13px] font-medium transition sm:min-h-0 sm:flex-none sm:rounded sm:py-1 ${
                 view === v.id
