@@ -23,13 +23,15 @@ export default function TopPick({ row }) {
   const carrierTier = tierLabel(row.tier);
 
   return (
-    <section className="mb-5 rounded-xl border border-zinc-200 bg-white p-5 dark:border-white/[0.08] dark:bg-white/[0.03]">
+    <section className="mb-5 rounded-xl border border-zinc-200 bg-white p-4 dark:border-white/[0.08] dark:bg-white/[0.03] sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400 dark:text-zinc-500">
             Best available now
           </p>
-          <p className="mt-2 font-mono text-[34px] font-bold leading-none tracking-tight text-zinc-900 num-tnum dark:text-white sm:text-[42px]">
+          {/* 34px left ~2px of slack inside the card at 320px. Stepped by width, and
+              never allowed to wrap: this number is the whole point of the card. */}
+          <p className="mt-2 whitespace-nowrap font-mono text-[26px] font-bold leading-none tracking-tight text-zinc-900 num-tnum dark:text-white min-[360px]:text-[32px] sm:text-[42px]">
             {formatMsisdn(row.msisdn)}
           </p>
           <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-zinc-500 dark:text-zinc-400">

@@ -23,7 +23,9 @@ export default function CopyButton({ value }) {
       type="button"
       onClick={copy}
       aria-label={`Copy ${value}`}
-      className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border bg-white transition dark:bg-ink-850 ${
+      // 44px on touch, tightened once there is a mouse: this is the row's primary
+      // action and 36px is below every touch-target guideline.
+      className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg border bg-white transition dark:bg-ink-850 sm:h-9 sm:w-9 ${
         copied
           ? "border-emerald-500/40 text-emerald-500"
           : "border-zinc-200 text-zinc-400 hover:border-zinc-300 hover:text-zinc-900 dark:border-white/5 dark:text-zinc-400 dark:hover:text-white"

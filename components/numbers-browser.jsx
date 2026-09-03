@@ -94,13 +94,16 @@ export default function NumbersBrowser({ initialRows, initialTotal }) {
   const listRows = hero ? rows.slice(1) : rows;
   const remaining = Math.max(0, total - rows.length);
 
+  // min-h-[44px] on touch, tightened at sm: where there is a pointer. The selects and
+  // the search box were 32-34px tall, below every touch-target guideline.
   const control =
-    "rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-[13px] text-zinc-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-200";
+    "min-h-[44px] rounded-lg border border-zinc-200 bg-white px-3 text-[13px] text-zinc-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-200 sm:min-h-0 sm:rounded-md sm:px-2.5 sm:py-1.5";
 
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div role="tablist" className="flex items-center gap-0.5 rounded-md border border-zinc-200 p-0.5 dark:border-white/10">
+        {/* Phone order: tabs, search, then the two selects side by side. */}
+        <div role="tablist" className="flex w-full items-center gap-0.5 rounded-lg border border-zinc-200 p-1 dark:border-white/10 sm:w-auto sm:rounded-md sm:p-0.5">
           {VIEWS.map((v) => (
             <button
               key={v.id}
@@ -108,7 +111,7 @@ export default function NumbersBrowser({ initialRows, initialTotal }) {
               type="button"
               aria-selected={view === v.id}
               onClick={() => setView(v.id)}
-              className={`rounded px-2.5 py-1 text-[13px] font-medium transition ${
+              className={`min-h-[44px] flex-1 rounded-md px-2.5 text-[13px] font-medium transition sm:min-h-0 sm:flex-none sm:rounded sm:py-1 ${
                 view === v.id
                   ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
                   : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
@@ -119,7 +122,7 @@ export default function NumbersBrowser({ initialRows, initialTotal }) {
           ))}
         </div>
 
-        <label className="relative ml-auto">
+        <label className="relative w-full sm:ml-auto sm:w-auto">
           <span className="sr-only">Search by digits</span>
           <input
             type="search"
@@ -127,11 +130,11 @@ export default function NumbersBrowser({ initialRows, initialTotal }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search any digits"
-            className={`${control} w-40 placeholder-zinc-400 focus-visible:ring-2 focus-visible:ring-zinc-400/40 sm:w-52`}
+            className={`${control} w-full placeholder-zinc-400 focus-visible:ring-2 focus-visible:ring-zinc-400/40 sm:w-52`}
           />
         </label>
 
-        <select aria-label="Carrier" value={carrier} onChange={(e) => setCarrier(e.target.value)} className={control}>
+        <select aria-label="Carrier" value={carrier} onChange={(e) => setCarrier(e.target.value)} className={`${control} flex-1 sm:flex-none`}>
           {CARRIERS.map((c) => (
             <option key={c.id} value={c.id}>
               {c.label}
@@ -139,7 +142,7 @@ export default function NumbersBrowser({ initialRows, initialTotal }) {
           ))}
         </select>
 
-        <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value)} className={control}>
+        <select aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value)} className={`${control} flex-1 sm:flex-none`}>
           {SORTS.map((s) => (
             <option key={s.id} value={s.id}>
               {s.label}
@@ -183,7 +186,7 @@ export default function NumbersBrowser({ initialRows, initialTotal }) {
             type="button"
             disabled={loading}
             onClick={() => load({ append: true })}
-            className="rounded-md border border-zinc-300 px-4 py-2 text-[12px] font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60 dark:border-white/15 dark:text-zinc-300 dark:hover:bg-white/5"
+            className="min-h-[44px] rounded-lg border border-zinc-300 px-5 text-[13px] font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-60 dark:border-white/15 dark:text-zinc-300 dark:hover:bg-white/5"
           >
             {loading ? "Loading" : `Show ${formatInt(Math.min(PAGE_SIZE, remaining))} more`}
           </button>

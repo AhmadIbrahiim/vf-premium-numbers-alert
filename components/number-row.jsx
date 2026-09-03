@@ -12,6 +12,12 @@ import CopyButton from "./copy-button.jsx";
  * The carrier shows as a 3px edge stripe rather than a shouting pill, and the score
  * appears as a word ("Excellent") plus a small number, because a bare "56" means
  * nothing without knowing the scale.
+ *
+ * On a phone the row has to stay one line of number plus one line of detail. The
+ * formatted number contains spaces, so without `whitespace-nowrap` it broke across two
+ * or three lines and rows grew to 113px — the hero of the row, hyphenated by the
+ * layout. The rank and the second pattern label are dropped on narrow screens to buy
+ * that width rather than shrink the number.
  */
 
 const CARRIER_STRIPE = {
@@ -29,7 +35,7 @@ export default function NumberRow({ row, rank }) {
   return (
     <div
       role="listitem"
-      className={`group relative flex items-center gap-3 overflow-hidden rounded-lg border border-zinc-200/80 bg-white pl-4 pr-3 py-2.5 transition hover:border-zinc-300 dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:border-white/15 ${
+      className={`group relative flex items-center gap-2.5 overflow-hidden rounded-lg border border-zinc-200/80 bg-white pl-4 pr-2.5 py-2.5 transition hover:border-zinc-300 dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:border-white/15 sm:gap-3 sm:pr-3 ${
         gone ? "opacity-50" : ""
       }`}
     >
@@ -39,14 +45,14 @@ export default function NumberRow({ row, rank }) {
       />
 
       {typeof rank === "number" ? (
-        <span className="num-tnum w-6 shrink-0 text-right text-[11px] tabular-nums text-zinc-400 dark:text-zinc-600">
+        <span className="num-tnum hidden w-6 shrink-0 text-right text-[11px] tabular-nums text-zinc-400 dark:text-zinc-600 sm:block">
           {rank + 1}
         </span>
       ) : null}
 
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-          <span className="font-mono text-[19px] font-semibold leading-none tracking-tight text-zinc-900 num-tnum dark:text-white">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="whitespace-nowrap font-mono text-[17px] font-semibold leading-none tracking-tight text-zinc-900 num-tnum dark:text-white min-[400px]:text-[19px]">
             {formatMsisdn(row.msisdn)}
           </span>
           {row.is_new ? (
@@ -68,20 +74,24 @@ export default function NumberRow({ row, rank }) {
           {carrierTier ? (
             <>
               <span aria-hidden="true" className="text-zinc-300 dark:text-zinc-700">·</span>
-              <span>{carrierTier}</span>
+              <span className="whitespace-nowrap">{carrierTier}</span>
             </>
           ) : null}
-          {reasons.map((r) => (
-            <span key={r} className="flex items-center gap-2">
+          {reasons.map((r, i) => (
+            // Only the first reason survives on a phone; two of them wrapped the detail
+            // line onto five lines at 320px.
+            <span key={r} className={`items-center gap-2 ${i === 0 ? "flex" : "hidden sm:flex"}`}>
               <span aria-hidden="true" className="text-zinc-300 dark:text-zinc-700">·</span>
-              {r}
+              <span className="whitespace-nowrap">{r}</span>
             </span>
           ))}
         </div>
       </div>
 
       <div className="shrink-0 text-right">
-        <div className={`text-[13px] font-semibold leading-none ${tier.tone}`}>{tier.label}</div>
+        <div className={`whitespace-nowrap text-[12px] font-semibold leading-none sm:text-[13px] ${tier.tone}`}>
+          {tier.label}
+        </div>
         <div className="num-tnum mt-1 text-[11px] text-zinc-400 dark:text-zinc-600">{row.score}</div>
       </div>
 

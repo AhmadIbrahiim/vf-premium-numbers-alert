@@ -104,7 +104,8 @@ export default async function StatusPage() {
         {summary.map(([k, v]) => (
           <div key={k} className="rounded-xl border border-zinc-200 bg-white px-4 py-3 dark:border-white/5 dark:bg-ink-850">
             <div className="text-[11px] uppercase tracking-wide text-zinc-500">{k}</div>
-            <div className="num-tnum mt-1 text-2xl font-bold">{v}</div>
+            {/* text-2xl wrapped "47 min ago" onto two lines on a phone. */}
+            <div className="num-tnum mt-1 text-xl font-bold sm:text-2xl">{v}</div>
           </div>
         ))}
       </section>

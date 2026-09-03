@@ -27,13 +27,17 @@ const CARRIER_DOT = {
 function EventRow({ e }) {
   const tier = scoreTier(e.score);
   return (
-    <li className="flex items-center gap-3 py-1.5">
+    <li className="flex items-center gap-2 py-1.5 sm:gap-3">
       <span
         aria-hidden="true"
         className={`h-1.5 w-1.5 shrink-0 rounded-full ${CARRIER_DOT[e.carrier] || "bg-zinc-400"}`}
       />
-      <span className="font-mono text-[15px] font-semibold num-tnum">{formatMsisdn(e.msisdn)}</span>
-      <span className="text-[12px] text-zinc-500 dark:text-zinc-400">
+      {/* shrink-0 + nowrap: as a shrinkable flex item the spaced number broke
+          across two lines on a phone. */}
+      <span className="shrink-0 whitespace-nowrap font-mono text-[14px] font-semibold num-tnum sm:text-[15px]">
+        {formatMsisdn(e.msisdn)}
+      </span>
+      <span className="truncate text-[12px] text-zinc-500 dark:text-zinc-400">
         {CARRIER_LABEL[e.carrier] || e.carrier}
       </span>
       <span className={`ml-auto shrink-0 text-[12px] font-semibold ${tier.tone}`}>{tier.label}</span>

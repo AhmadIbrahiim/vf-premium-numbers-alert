@@ -60,29 +60,31 @@ export default function RootLayout({ children }) {
       </head>
       <body className="min-h-screen font-sans text-zinc-900 antialiased dark:text-zinc-100">
         <div className="mx-auto max-w-6xl px-4 pb-20 pt-7 sm:px-6">
-          <header className="mb-6 flex flex-wrap items-center gap-3">
-            <Link href="/" className="flex items-center gap-2.5 no-underline">
+          <header className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2.5">
+            <Link href="/" className="mr-auto flex min-h-[44px] items-center gap-2.5 no-underline sm:min-h-0">
               <span className="grid h-8 w-8 place-items-center rounded-lg bg-vf-red text-sm font-extrabold text-white">
                 EG
               </span>
               <span className="text-[15px] font-bold tracking-tight">Premium Numbers</span>
             </Link>
-            <nav className="ml-auto flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white p-1 dark:border-white/5 dark:bg-ink-850">
+            {/* order-last + w-full puts the nav on its own row on a phone; from sm: it
+                returns to sitting between the logo and the theme toggle. */}
+            <nav className="order-last flex w-full items-center gap-1 rounded-xl border border-zinc-200 bg-white p-1 dark:border-white/5 dark:bg-ink-850 sm:order-none sm:ml-auto sm:w-auto sm:gap-1.5">
               <Link
                 href="/"
-                className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-600 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                className="grid min-h-[44px] flex-1 place-items-center rounded-lg px-3 text-sm font-medium text-zinc-600 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white sm:min-h-0 sm:flex-none sm:py-1.5"
               >
                 Numbers
               </Link>
               <Link
                 href="/changes"
-                className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-600 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                className="grid min-h-[44px] flex-1 place-items-center rounded-lg px-3 text-sm font-medium text-zinc-600 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white sm:min-h-0 sm:flex-none sm:py-1.5"
               >
                 Changes
               </Link>
               <Link
                 href="/status"
-                className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-600 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                className="grid min-h-[44px] flex-1 place-items-center rounded-lg px-3 text-sm font-medium text-zinc-600 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white sm:min-h-0 sm:flex-none sm:py-1.5"
               >
                 Providers
               </Link>

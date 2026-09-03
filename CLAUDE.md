@@ -295,6 +295,48 @@ Tests: `test/sw.test.js` runs the worker for real in a fake `ServiceWorkerGlobal
 worthless — a grep for `"/api/"` passes whether or not API requests are bypassed. When
 changing the worker, mutation-test it: revert a rule and confirm a test fails.
 
+### Testing the install prompt needs a production build
+
+Chromium only fires `beforeinstallprompt` when a service worker is registered, and the
+worker deliberately does not register in development. So **the install sheet never
+appears on `next dev`** — that is the dev-unregister rule working, not a bug. Test it
+with `next build && next start`.
+
+Two process traps that cost time here:
+
+- `next build` while a `next start` is running replaces `.next` underneath it. The old
+  server keeps serving HTML that references chunks that no longer exist, so the CSS
+  404s/500s and the page renders **unstyled** — which looks exactly like a broken
+  stylesheet. Stop the server first.
+- Killing the npm wrapper does not free the port; `next-server` is a separate process.
+  Find the listener by port (`lsof -nP -iTCP:<port> -sTCP:LISTEN -t`) rather than
+  pattern-matching on "next", which also matches other projects' dev servers.
+
+## Mobile layout — the number must never wrap
+
+The formatted number contains spaces (`0110 123 2101`), so as an ordinary flex item it
+breaks across lines. That happened in both lists: rows were **113px tall at 375px and
+179px at 320px**, with the number — the product — hyphenated by the layout across two
+or three lines. Every place a number is rendered needs `whitespace-nowrap`, and in a
+flex row also `shrink-0`, letting the carrier label truncate instead.
+
+Widths are swept programmatically at 320/360/375/390/414/768/1024/1280 against a
+production build, checking for horizontal scroll, elements past the viewport, wrapped
+numbers and touch targets under 44px. Two things to know if you write that check again:
+
+- **Count line boxes with `getClientRects().length`,** not `height / fontSize`. With a
+  normal line-height a single line measures ~1.5 and rounds to 2, so every number looks
+  wrapped.
+- **Skip elements inside an `overflow-x-auto` ancestor.** The Recent-polls table is
+  deliberately `min-w-[620px]` inside a scroller; its cells are *supposed* to sit past
+  the viewport. The body is what must never scroll sideways.
+
+Controls are 44px on touch and tighten at `sm:` where there is a pointer. The narrow
+layout is explicit rather than left to `flex-wrap`: header logo + theme toggle, then a
+full-width nav; then tabs, a full-width search, and the two selects sharing a row.
+`flex-wrap` alone orphaned the sort select on its own line and pushed the theme toggle
+onto a second row at 320px.
+
 ## Commands
 
 ```bash
@@ -388,3 +430,13 @@ which now points at the retired Pages site.
 This machine runs **zsh**, where `"$var:refs/..."` applies the `:r` *remove-extension*
 modifier and silently mangles the string. Always brace it: `"${var}:refs/..."`. It cost
 a confusing round of "src refspec does not match any".
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
