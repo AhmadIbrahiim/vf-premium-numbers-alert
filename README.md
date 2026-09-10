@@ -195,3 +195,29 @@ for Neon's SQL-over-HTTP endpoint.
   organizes that public data.
 - If a carrier rotates its gating tokens and fetches start failing, the run skips
   safely without corrupting data.
+
+## Zeros are the market's currency
+
+A dealer's rule, plainly: **the more zeros the more premium**. `010 00000000` is the top of
+the tree, `11111111` close behind, and a zero is worth more than any other digit wherever
+it sits. The scorer used to contradict that in three ways:
+
+1. **Zeros only paid when trailing**, or when there were at least five of them. Counts 1-4
+   earned nothing at all, so the score could *fall* as zeros were added.
+2. **All-same was digit-blind.** `44444444` and `00000000` both scored 100.
+3. **The hard cap destroyed the ordering above it.** Nine distinct patterns tied at exactly
+   100, including `77777777` against `00000077`.
+
+Fixed by a monotonic zero ladder (with a smaller one for ones), by suppressing bonuses that
+are *vacuously* true of an all-same number — `77777777` was collecting `paired-AABB` and
+`palindrome` for 80 points it had not earned — and by replacing the hard cap with a soft
+knee above 85. The knee leaves the 0-85 band untouched, which is where every real number
+lives: the highest score ever observed across ~206k published numbers is 59.
+
+Resulting order: all-zeros 99, all-ones 95, `11223344` 92, all-fours 89, ascending 85.
+
+**This shifts `ALERT_THRESHOLD`.** On a 206k synthetic pool, the old scorer put 88 numbers
+at or above 50; the new one puts 395 there, and 66 at or above 70. If you want the previous
+alert volume, the threshold is now roughly **70** — but measure it against the real pool
+before trusting that number, since a uniform synthetic pool is not what the carriers
+publish.

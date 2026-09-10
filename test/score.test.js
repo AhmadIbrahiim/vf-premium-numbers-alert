@@ -212,3 +212,56 @@ test("digit ladders only count for steps of 2, not arbitrary ones", () => {
     );
   }
 });
+
+test("zeros are worth more than any other digit, and rising with count", () => {
+  // The market rule, from a dealer: "the more zeros the more premium". The old scorer
+  // paid for zeros only when TRAILING or when there were at least five, so counts 1-4
+  // earned nothing at all for their zeros.
+  const scoreOf = (sub) => scoreMsisdn("010" + sub).score;
+  const zeroCredit = [];
+  for (let z = 2; z <= 7; z++) {
+    // Same shape throughout: one run of zeros, one run of sevens.
+    zeroCredit.push(scoreOf("0".repeat(z) + "7".repeat(8 - z)));
+  }
+  // Not asserting strict monotonicity — swapping a digit also changes which shape
+  // bonuses fire — but a number with six zeros must beat the same shape with two.
+  assert.ok(
+    scoreOf("00000077") > scoreOf("00777777"),
+    "six zeros must beat two zeros in the same two-run shape"
+  );
+  assert.ok(zeroCredit.every((s) => s > 0), "every zero count must earn something");
+});
+
+test("a zero-heavy number outranks the same shape built from another digit", () => {
+  for (const [zeros, others] of [
+    ["00000777", "77777777"],
+    ["00012345", "77712345"],
+    ["01000000", "01777777"],
+  ]) {
+    const z = scoreMsisdn("010" + zeros).score;
+    const o = scoreMsisdn("010" + others).score;
+    assert.ok(z >= o, `${zeros} (${z}) should be at least ${others} (${o})`);
+  }
+});
+
+test("all-same numbers do not collect bonuses that are vacuously true of them", () => {
+  // 77777777 is trivially AABB, trivially a palindrome and trivially two-groups. Letting
+  // those fire stacked 95 + 52 + 28 = 175, hitting the cap on its own, so all-fours tied
+  // with all-zeros — which the market prices far higher.
+  const { tags } = scoreMsisdn("01077777777");
+  assert.ok(tags.includes("all-same"));
+  assert.ok(!tags.includes("paired-AABB"), "AABB is vacuous for an all-same number");
+  assert.ok(!tags.includes("palindrome"), "palindrome is vacuous for an all-same number");
+  assert.ok(
+    scoreMsisdn("01000000000").score > scoreMsisdn("01077777777").score,
+    "all zeros must outrank all sevens"
+  );
+});
+
+test("ones rank above ordinary digits but below zeros", () => {
+  const zero = scoreMsisdn("01000000123").score;
+  const one = scoreMsisdn("01011111123").score;
+  const four = scoreMsisdn("01044444123").score;
+  assert.ok(one > four, `ones (${one}) should beat fours (${four})`);
+  assert.ok(zero >= one, `zeros (${zero}) should be at least ones (${one})`);
+});

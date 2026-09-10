@@ -241,7 +241,12 @@ export function scoreMsisdn(msisdn) {
       break;
     }
   }
-  if (aabb) {
+  // An all-same number is vacuously AABB, and vacuously a palindrome, and vacuously
+  // two-groups-of-pairs. Letting those fire stacked 95 + 52 + 28 = 175 onto 77777777
+  // before any zero credit existed, so it hit the 100 cap on its own and tied with
+  // 00000000 — which the market prices far higher. A pattern bonus should describe
+  // something the all-same rule has not already said.
+  if (aabb && sameRun < 8) {
     score += 52;
     tags.push("paired-AABB");
   }
@@ -262,7 +267,7 @@ export function scoreMsisdn(msisdn) {
   // Mirror is a recognized but MID-tier category in the EG market: a palindrome
   // with several distinct digits is not "premium" on its own. It only climbs when
   // paired with heavy repetition or zeros, which other rules above already reward.
-  if (isPalindrome(sub)) {
+  if (isPalindrome(sub) && sameRun < 8) {
     score += 28;
     tags.push("palindrome");
   }
@@ -383,19 +388,65 @@ export function scoreMsisdn(msisdn) {
     if (!tags.includes("paired-AABB")) tags.push("grouped");
   }
 
-  // --- lots of zeros anywhere (easy to dictate), beyond trailing zeros ---
+  /*
+   * --- zeros, and to a lesser extent ones, anywhere in the number ---
+   *
+   * The market rule, stated plainly by a dealer: "the more zeros the more premium",
+   * with 010 00000000 the top of the tree and 11111111 close behind. The old code paid
+   * for zeros only when they were TRAILING, or when there were at least five of them,
+   * which produced a score that FELL as zeros were added:
+   *
+   *   20345678  1 zero  -> 54     00120012  4 zeros -> 38
+   *   20304567  2 zeros -> 18     00100201  5 zeros -> 22
+   *   20304056  3 zeros -> 12     00100001  6 zeros -> 76
+   *
+   * Non-monotonic, and inverted at the low end: each zero broke the ascending run that
+   * was earning the points and nothing replaced it, so counts 1-4 earned nothing at all
+   * for their zeros.
+   *
+   * A monotonic ladder fixes the ordering of the repetition patterns too, without a
+   * separate rule: eight zeros collect the top rung while eight fours collect nothing,
+   * so all-zeros now outranks all-ones which outranks all-fours — which the digit-blind
+   * `all-same` bonus alone could never express.
+   *
+   * Indexed by count, 0..8.
+   */
+  const ZERO_LADDER = [0, 2, 7, 14, 23, 34, 46, 58, 70];
+  const ONE_LADDER = [0, 0, 2, 5, 9, 14, 20, 27, 34];
+
   const zeros = countDigit(digits, 0);
-  if (zeros >= 6) {
-    score += 24;
-    tags.push("mostly-zeros");
-  } else if (zeros >= 5 && tz < 5) {
-    score += 14;
-    tags.push("many-zeros");
+  if (zeros >= 1) {
+    score += ZERO_LADDER[zeros];
+    if (zeros >= 5) tags.push(zeros >= 6 ? "mostly-zeros" : "many-zeros");
+    else if (zeros >= 2) tags.push(`zeros-x${zeros}`);
   }
 
-  // Normalize / cap.
+  const ones = countDigit(digits, 1);
+  if (ones >= 2) {
+    score += ONE_LADDER[ones];
+    if (ones >= 5) tags.push("mostly-ones");
+    else tags.push(`ones-x${ones}`);
+  }
+
+  /*
+   * Normalise.
+   *
+   * A hard cap at 100 destroyed the ordering of everything above it, and the bonuses sum
+   * well past 100: 00000077 (six zeros) and 00777777 (two zeros) both landed on exactly
+   * 100, which contradicts the market rule the zero ladder exists to express. Nine
+   * distinct patterns tied at the ceiling.
+   *
+   * So the cap is now a soft knee. Below 85 the score is untouched — that band holds
+   * every number the carriers actually publish (the highest ever observed across ~206k
+   * real numbers is 59), so the calibration of ALERT_THRESHOLD against real data is
+   * unaffected. Above 85 it approaches 100 asymptotically, which keeps distinct patterns
+   * distinctly ordered no matter how many bonuses they collect.
+   */
   if (score < 0) score = 0;
-  if (score > 100) score = 100;
+  const KNEE = 85;
+  if (score > KNEE) {
+    score = Math.round(KNEE + (100 - KNEE) * (1 - Math.exp(-(score - KNEE) / 45)));
+  }
 
   return { score, tags };
 }
