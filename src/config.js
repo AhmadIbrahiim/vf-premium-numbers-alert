@@ -95,7 +95,18 @@ export const CARRIER_SHRINK_TOLERANCE = Number(process.env.CARRIER_SHRINK_TOLERA
  * ~215 clear 50). The old default of 90 was therefore unreachable — no alert could ever
  * fire. 50 puts the bar in the genuinely-good band while staying rare enough to matter.
  */
-export const ALERT_THRESHOLD = Number(process.env.ALERT_THRESHOLD || 50);
+/*
+ * 70, not 50. The zero-weighting rework raised scores across the board: on an identical
+ * 206k pool, numbers at or above 50 went from 88 to 395, so keeping 50 would have made
+ * the alert fire about 4.5x more often overnight. 70 restores the previous volume (66 on
+ * that pool).
+ *
+ * That measurement comes from a UNIFORM SYNTHETIC pool, which is not what the carriers
+ * publish — the real catalogue is far more skewed toward low scores. Re-measure against
+ * the real pool and adjust; a threshold set from synthetic data is an estimate, and the
+ * last one (90) was wrong enough that the alert never fired at all.
+ */
+export const ALERT_THRESHOLD = Number(process.env.ALERT_THRESHOLD || 70);
 
 // NOTE: the Resend alert settings (RESEND_API_KEY, ALERT_EMAIL_TO, ALERT_EMAIL_FROM)
 // are deliberately NOT re-exported here — src/email.js reads them from the environment

@@ -141,7 +141,7 @@ Set as GitLab CI/CD variables or in `.gitlab-ci.yml` (all optional):
 | `LLM_BASE_URL` | — | OpenAI-compatible API root; empty disables LLM grading |
 | `LLM_API_KEY` | — | Key for `LLM_BASE_URL` |
 | `MODEL` | `gpt-4o-mini` | Model id, in the provider's own naming |
-| `ALERT_THRESHOLD` | `50` | Min score for a NEW number to raise an alert. **Not 90:** the public catalogs top out at 59 across all ~206k numbers (~215 clear 50, ~20 clear 60), so 90 could never fire |
+| `ALERT_THRESHOLD` | `70` | Min score for a NEW number to raise an alert. **Not 90:** that could never fire — the old scorer topped out at 59 across all ~206k published numbers. **And no longer 50:** the zero-weighting rework raised scores, taking a 206k pool from 88 numbers at 50+ to 395, so 50 now fires ~4.5x too often. 70 restores the previous volume — confirm against the real catalogue |
 | `RESEND_API_KEY` | — | Resend key; unset disables email alerts |
 | `ALERT_EMAIL_TO` | — | Alert recipient; unset disables email alerts |
 | `ALERT_EMAIL_FROM` | `onboarding@resend.dev` | Sender. Resend's shared sender only delivers to the Resend account owner — to email anyone else, verify a domain at resend.com/domains and set this to an address on it |
