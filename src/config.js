@@ -90,21 +90,22 @@ export const CARRIER_SHRINK_TOLERANCE = Number(process.env.CARRIER_SHRINK_TOLERA
 /**
  * A NEW number must score >= this to raise an alert.
  *
- * The scale is 0-100 but the public catalogs do not reach the top of it: across all
- * ~160k numbers the best heuristic score observed is 59 (only ~20 numbers clear 60,
- * ~215 clear 50). The old default of 90 was therefore unreachable — no alert could ever
- * fire. 50 puts the bar in the genuinely-good band while staying rare enough to matter.
- */
-/*
- * 70, not 50. The zero-weighting rework raised scores across the board: on an identical
- * 206k pool, numbers at or above 50 went from 88 to 395, so keeping 50 would have made
- * the alert fire about 4.5x more often overnight. 70 restores the previous volume (66 on
- * that pool).
+ * Two corrections live in this number, and both came from measuring rather than reading
+ * the nominal 0-100 range.
  *
- * That measurement comes from a UNIFORM SYNTHETIC pool, which is not what the carriers
- * publish — the real catalogue is far more skewed toward low scores. Re-measure against
- * the real pool and adjust; a threshold set from synthetic data is an estimate, and the
- * last one (90) was wrong enough that the alert never fired at all.
+ * It was 90, which no number could reach: across all ~206k published numbers the best
+ * score the old scorer ever produced was 59, so the alert had never fired once since the
+ * project began. That took it to 50.
+ *
+ * It is now 70, because the zero-weighting rework lifted scores across the board. On an
+ * identical 206k pool, numbers at or above 50 went from 88 to 395 — leaving the default
+ * at 50 would have made the alert fire about 4.5x more often overnight. 70 puts the
+ * volume back where it was (66 on that pool).
+ *
+ * That second figure comes from a UNIFORM SYNTHETIC pool, which is not what the carriers
+ * publish; the real catalogue is far more skewed toward low scores. So treat 70 as an
+ * estimate and re-measure against real data. A threshold set from the range rather than
+ * the distribution is exactly how 90 survived for months looking like a working feature.
  */
 export const ALERT_THRESHOLD = Number(process.env.ALERT_THRESHOLD || 70);
 
