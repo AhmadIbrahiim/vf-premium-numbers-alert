@@ -12,7 +12,8 @@
     "start": "next start",
     "poll": "node src/run.js",
     "check-stale": "node src/check-stale.js",
-    "test": "node --test"
+    "test": "node --test",
+    "calibrate": "node src/calibrate.js"
   },
   "license": "MIT",
   "dependencies": {

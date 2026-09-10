@@ -216,8 +216,18 @@ lives: the highest score ever observed across ~206k published numbers is 59.
 
 Resulting order: all-zeros 99, all-ones 95, `11223344` 92, all-fours 89, ascending 85.
 
-**This shifts `ALERT_THRESHOLD`.** On a 206k synthetic pool, the old scorer put 88 numbers
-at or above 50; the new one puts 395 there, and 66 at or above 70. If you want the previous
-alert volume, the threshold is now roughly **70** — but measure it against the real pool
-before trusting that number, since a uniform synthetic pool is not what the carriers
-publish.
+**This shifts `ALERT_THRESHOLD`**, now defaulted to 70. On a 206k synthetic pool the old
+scorer put 88 numbers at or above 50; the new one puts 395 there, and 66 at or above 70 —
+so 50 would fire about 4.5x too often.
+
+That figure is an estimate: a uniform synthetic pool is not what the carriers publish,
+whose catalogue is far more skewed toward low scores. To replace the estimate with the real
+number, against the real catalogue:
+
+```sh
+DATABASE_URL='postgresql://...' npm run calibrate
+```
+
+It runs one SELECT, writes nothing, and prints the number count at every threshold plus
+the threshold that reproduces the historical alert volume (~215 numbers, which is what the
+old scorer cleared at 50). If that differs from 70, set `ALERT_THRESHOLD` to it.
